@@ -655,9 +655,28 @@ async function fetchText(url) {
   if (!r.ok) throw new Error(t.trim().slice(0, 140) || 'HTTP ' + r.status);
   return t;
 }
+// Snapshot published with the site (refreshed every 2 h by a GitHub Action), so visitors
+// don't each hit CelesTrak's once-per-2-hours-per-IP download limit.
+let siteMeta;
+async function getSiteMeta(reset) {
+  if (reset) siteMeta = undefined;
+  if (siteMeta !== undefined) return siteMeta;
+  try { const r = await fetch('data/meta.json', { cache: 'no-cache' }); siteMeta = r.ok ? await r.json() : null; } catch { siteMeta = null; }
+  return siteMeta;
+}
 async function fetchGroup(g, forceNet = false) {
   const key = 'ssa.tle.' + g, cached = store.get(key, null);
   if (cached && !forceNet && Date.now() - cached.t < 2 * 3600e3) return cached;
+  const meta = await getSiteMeta(forceNet);
+  let snap = null;
+  if (meta && Array.isArray(meta.groups) && meta.groups.includes(g)) {
+    try {
+      const r = await fetch(`data/${g}.txt`, { cache: 'no-cache' });
+      const text = r.ok ? await r.text() : '';
+      if (/\n1 /.test(text)) snap = { t: meta.t * 1000, text };
+    } catch {}
+  }
+  if (snap && (!cached || snap.t >= cached.t) && Date.now() - snap.t < 4 * 3600e3) { store.set(key, snap); return snap; }
   try {
     const text = await fetchText(`${CELESTRAK}?GROUP=${encodeURIComponent(g)}&FORMAT=tle`);
     if (!/\n1 /.test(text)) throw new Error(text.trim().slice(0, 140) || 'Empty response');
@@ -665,7 +684,8 @@ async function fetchGroup(g, forceNet = false) {
     if (!store.set(key, rec)) { for (const k of GROUPS.flatMap(x => x.items.map(i => i[0]))) if (k !== g && k !== 'active') store.del('ssa.tle.' + k); store.set(key, rec); }
     return rec;
   } catch (e) {
-    if (cached) return { ...cached, stale: true };
+    const best = [snap, cached].filter(Boolean).sort((a, b) => b.t - a.t)[0];
+    if (best) return { ...best, stale: Date.now() - best.t > 4 * 3600e3 };
     throw e;
   }
 }
@@ -1614,7 +1634,7 @@ async function boot() {
   $('#loadMsg').textContent = 'Downloading live orbital data from CelesTrak…';
   const results = await Promise.allSettled([...S.layers].map(g => loadLayer(g)));
   if (!S.sats.length) {
-    $('#loadMsg').textContent = 'Could not reach CelesTrak.';
+    $('#loadMsg').textContent = 'Could not load orbital data from CelesTrak.';
     $('#loadErr').style.display = '';
     $('#loadErr').innerHTML = `<p class="hint">${esc(results.find(r => r.status === 'rejected')?.reason?.message || 'Network error')}</p><div class="bar" style="justify-content:center"><button class="btn solid" id="retry">Retry</button><button class="btn ghost" id="offline">Continue & import TLEs</button></div>`;
     $('#retry').onclick = () => location.reload();
