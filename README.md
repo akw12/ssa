@@ -2,7 +2,7 @@
 
 A live, browser-based SSA console. It shows about 16,000 tracked objects on a 3D/2D globe using live NORAD orbital data from CelesTrak, propagated in real time with SGP4.
 
-**Live site:** https://akw12.github.io/orbital-watch/
+**Live site:** https://akw12.github.io/ssa/
 
 ## Features
 - Live globe (3D / 2D / 2.5D) with objects colored by orbit regime or object type
