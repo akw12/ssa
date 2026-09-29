@@ -1,0 +1,1637 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Orbital Watch SSA</title>
+<script>window.CESIUM_BASE_URL = 'https://cdn.jsdelivr.net/npm/cesium@1.121.0/Build/Cesium/';</script>
+<script src="https://cdn.jsdelivr.net/npm/cesium@1.121.0/Build/Cesium/Cesium.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/cesium@1.121.0/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/satellite.js@4.1.4/dist/satellite.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#03060c; --panel:rgba(9,14,26,.88); --panel-2:rgba(18,26,44,.92); --panel-3:rgba(30,41,64,.7);
+  --line:rgba(148,163,184,.15); --line-2:rgba(148,163,184,.28);
+  --text:#e6edf7; --muted:#8a9ab3; --dim:#5d6b82;
+  --accent:#22d3ee; --accent-2:#0891b2; --ok:#34d399; --warn:#fbbf24; --bad:#f87171; --violet:#a78bfa;
+  --r:12px; --mono:'JetBrains Mono',ui-monospace,Consolas,monospace; --sans:Inter,system-ui,-apple-system,Segoe UI,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font:13px/1.45 var(--sans)}
+button,select,input,textarea{font:inherit;color:inherit}
+#globe{position:fixed;inset:0}
+.cesium-viewer-bottom,.cesium-widget-credits{display:none!important}
+.mono{font-family:var(--mono)}
+.glass{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);backdrop-filter:blur(14px) saturate(140%);-webkit-backdrop-filter:blur(14px) saturate(140%);box-shadow:0 10px 40px rgba(0,0,0,.45)}
+
+/* ---------- top bar ---------- */
+.topbar{position:fixed;top:10px;left:10px;right:10px;height:56px;display:flex;align-items:center;gap:10px;padding:0 10px 0 14px;z-index:20;overflow-x:auto;scrollbar-width:none}
+.topbar::-webkit-scrollbar{display:none}
+.brand{display:flex;align-items:center;gap:10px;min-width:max-content;padding-right:8px;border-right:1px solid var(--line);height:34px}
+.brand b{display:block;font-size:13px;letter-spacing:.16em}
+.brand span{display:block;font-size:10px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
+.clock{min-width:max-content;text-align:left;padding:0 4px}
+.clock .t{font:600 19px/1 var(--mono);letter-spacing:.02em}
+.clock .d{font-size:10.5px;color:var(--muted);margin-top:3px;letter-spacing:.04em}
+.badge{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:99px;font:600 11px var(--mono);letter-spacing:.06em;border:1px solid;cursor:pointer;background:transparent;min-width:max-content}
+.badge.live{color:var(--ok);border-color:rgba(52,211,153,.45);background:rgba(52,211,153,.08)}
+.badge.live i{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 0 rgba(52,211,153,.7);animation:pulse 1.8s infinite}
+.badge.sim{color:var(--violet);border-color:rgba(167,139,250,.45);background:rgba(167,139,250,.08)}
+.badge.paused{color:var(--warn);border-color:rgba(251,191,36,.45);background:rgba(251,191,36,.08)}
+.badge i{width:7px;height:7px;border-radius:50%;background:currentColor}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(52,211,153,.6)}70%{box-shadow:0 0 0 8px rgba(52,211,153,0)}100%{box-shadow:0 0 0 0 rgba(52,211,153,0)}}
+.grp{display:flex;align-items:center;gap:2px;padding:3px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.02);min-width:max-content}
+.btn{height:28px;padding:0 10px;border-radius:7px;border:0;background:transparent;color:var(--text);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;transition:background .15s,color .15s}
+.btn:hover{background:rgba(148,163,184,.14)}
+.btn.on{background:rgba(34,211,238,.16);color:var(--accent)}
+.btn.icon{width:30px;padding:0}
+.btn.solid{background:var(--accent-2);color:#fff}
+.btn.solid:hover{background:#0e7490}
+.btn.ghost{border:1px solid var(--line-2)}
+.btn.danger:hover{background:rgba(248,113,113,.15);color:var(--bad)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+select.sel{height:28px;border-radius:7px;border:0;background:transparent;padding:0 6px;cursor:pointer}
+select.sel option,select option{background:#0f172a}
+.spacer{flex:1}
+
+/* ---------- side panels ---------- */
+#left{position:fixed;top:76px;left:10px;bottom:10px;width:380px;display:flex;flex-direction:column;z-index:10;overflow:hidden;transition:transform .25s}
+#left.collapsed{transform:translateX(calc(-100% - 20px))}
+.tabs{display:flex;border-bottom:1px solid var(--line);padding:6px 6px 0}
+.tab{flex:1;background:none;border:0;padding:9px 4px 10px;color:var(--muted);cursor:pointer;font-size:12px;font-weight:600;border-bottom:2px solid transparent;display:flex;align-items:center;justify-content:center;gap:5px}
+.tab:hover{color:var(--text)}
+.tab.on{color:var(--accent);border-bottom-color:var(--accent)}
+.tab .n{font:600 10px var(--mono);background:var(--panel-3);border-radius:99px;padding:1px 6px;color:var(--text)}
+.pane{display:none;flex:1;overflow:auto;padding:12px 14px 16px}
+.pane.on{display:block}
+.pane::-webkit-scrollbar,#right::-webkit-scrollbar,.list::-webkit-scrollbar{width:8px}
+.pane::-webkit-scrollbar-thumb,#right::-webkit-scrollbar-thumb,.list::-webkit-scrollbar-thumb{background:rgba(148,163,184,.2);border-radius:8px}
+h3{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:16px 0 8px;font-weight:600;display:flex;align-items:center;gap:8px}
+h3:first-child{margin-top:2px}
+h3 .r{margin-left:auto;text-transform:none;letter-spacing:0;font-weight:500}
+.hint{color:var(--muted);font-size:12px;margin:0 0 10px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.stat{background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.stat .v{font:600 17px/1.1 var(--mono)}
+.stat .k{font-size:10.5px;color:var(--muted);margin-top:2px}
+.search{position:relative;margin-top:12px}
+.search input{width:100%;height:38px;border-radius:10px;border:1px solid var(--line-2);background:rgba(2,6,15,.6);padding:0 12px 0 36px;outline:none}
+.search input:focus{border-color:var(--accent)}
+.search svg{position:absolute;left:11px;top:11px;color:var(--muted)}
+.search kbd{position:absolute;right:10px;top:10px;font:11px var(--mono);color:var(--dim);border:1px solid var(--line-2);border-radius:5px;padding:0 5px}
+.list{margin-top:8px}
+.row{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:8px;cursor:pointer}
+.row:hover{background:rgba(148,163,184,.1)}
+.row.sel{background:rgba(34,211,238,.1)}
+.dot{width:9px;height:9px;border-radius:50%;flex:none;box-shadow:0 0 8px currentColor}
+.row .nm{flex:1;min-width:0}
+.row .nm b{display:block;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .nm small{color:var(--muted);font:11px var(--mono)}
+.row .meta{font:11px var(--mono);color:var(--muted);text-align:right;white-space:nowrap}
+.star{background:none;border:0;color:var(--dim);cursor:pointer;padding:4px;border-radius:6px;display:flex}
+.star:hover{color:var(--warn);background:rgba(251,191,36,.1)}
+.star.on{color:var(--warn)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:99px;border:1px solid var(--line-2);background:transparent;cursor:pointer;font-size:12px;color:var(--muted);transition:all .15s}
+.chip:hover{color:var(--text);border-color:var(--muted)}
+.chip.on{color:var(--text);background:rgba(34,211,238,.12);border-color:rgba(34,211,238,.5)}
+.chip .c{font:10px var(--mono);color:var(--dim)}
+.chip.on .c{color:var(--accent)}
+.chip .spin{width:10px;height:10px;border:2px solid var(--accent);border-right-color:transparent;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.lgroup{margin-bottom:10px}
+.lgroup .lt{font-size:11px;color:var(--dim);margin-bottom:5px}
+details{border:1px solid var(--line);border-radius:10px;padding:0 12px;margin-top:10px;background:rgba(255,255,255,.015)}
+details>summary{cursor:pointer;list-style:none;padding:10px 0;font-weight:600;font-size:12px;display:flex;align-items:center;gap:8px}
+details>summary::-webkit-details-marker{display:none}
+details>summary::after{content:'';margin-left:auto;width:7px;height:7px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg);transition:transform .2s}
+details[open]>summary::after{transform:rotate(-135deg)}
+details>div{padding-bottom:12px}
+.field{display:flex;flex-direction:column;gap:4px;margin-bottom:8px}
+.field label{font-size:11px;color:var(--muted)}
+.inp{height:32px;border-radius:8px;border:1px solid var(--line-2);background:rgba(2,6,15,.6);padding:0 10px;outline:none;width:100%}
+.inp:focus{border-color:var(--accent)}
+textarea.inp{height:110px;padding:8px 10px;font:11px var(--mono);resize:vertical}
+.f3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.f2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.bar{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.status{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;margin-top:10px}
+.status .ok{color:var(--ok)}
+
+/* watch cards */
+.wcard{border:1px solid var(--line);border-radius:12px;background:var(--panel-2);padding:10px 12px;margin-bottom:8px;position:relative;overflow:hidden;cursor:pointer;transition:border-color .15s}
+.wcard:hover{border-color:var(--line-2)}
+.wcard.sel{border-color:rgba(34,211,238,.6)}
+.wcard::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--c)}
+.wtop{display:flex;align-items:center;gap:8px}
+.wtop b{font-weight:600;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:8px}
+.wgrid div{font:12px var(--mono)}
+.wgrid small{display:block;font:10px var(--sans);color:var(--muted)}
+.wnext{font-size:11.5px;color:var(--muted);margin-top:7px;display:flex;gap:6px;align-items:center}
+.wnext b{color:var(--text);font-weight:500}
+.tag{display:inline-flex;align-items:center;gap:4px;height:19px;padding:0 7px;border-radius:5px;font:600 10px var(--mono);letter-spacing:.04em;background:color-mix(in srgb,var(--c,#94a3b8) 16%,transparent);color:var(--c,#cbd5e1);border:1px solid color-mix(in srgb,var(--c,#94a3b8) 35%,transparent);white-space:nowrap}
+.mini{display:flex;gap:2px}
+.mini button{background:none;border:0;color:var(--muted);padding:4px;border-radius:6px;cursor:pointer;display:flex}
+.mini button:hover{color:var(--text);background:rgba(148,163,184,.14)}
+.mini button.on{color:var(--accent)}
+
+/* right details */
+#right{position:fixed;top:76px;right:10px;width:360px;max-height:calc(100% - 150px);overflow:auto;z-index:10;padding:14px 16px 16px;display:none}
+#right.on{display:block;animation:slidein .2s ease-out}
+@keyframes slidein{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:none}}
+.dhead{display:flex;gap:10px;align-items:flex-start}
+.dhead h2{margin:0;font-size:17px;font-weight:700;line-height:1.2;word-break:break-word}
+.dhead .sub{font:11.5px var(--mono);color:var(--muted);margin-top:3px}
+.dhead .dot{margin-top:6px;width:11px;height:11px}
+.tags{display:flex;gap:5px;flex-wrap:wrap;margin:10px 0 0}
+.plain{background:rgba(34,211,238,.06);border:1px solid rgba(34,211,238,.18);border-radius:10px;padding:9px 11px;margin:12px 0 0;font-size:12.5px;color:#cfe7f0}
+.actions{display:grid;grid-template-columns:repeat(5,1fr);gap:5px;margin-top:12px}
+.actions .btn{flex-direction:column;height:50px;gap:3px;font-size:10.5px;border:1px solid var(--line);background:rgba(255,255,255,.02)}
+.actions .btn:hover{border-color:var(--line-2)}
+.actions .btn.on{border-color:rgba(34,211,238,.5)}
+.kv{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.kv>div{background:var(--panel-2);padding:7px 10px}
+.kv small{display:block;font-size:10.5px;color:var(--muted)}
+.kv span{font:500 13px var(--mono)}
+[data-tip]{position:relative;cursor:help}
+[data-tip]:hover::after{content:attr(data-tip);position:absolute;left:0;top:100%;margin-top:4px;z-index:50;width:220px;background:#020617;border:1px solid var(--line-2);color:var(--text);font:11.5px/1.4 var(--sans);padding:7px 9px;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.5);pointer-events:none;white-space:normal;text-transform:none;letter-spacing:0}
+pre.tle{font:10.5px/1.5 var(--mono);background:rgba(2,6,15,.7);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:6px 0;overflow-x:auto;color:#b6c6dc}
+.passes{border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.pass{display:grid;grid-template-columns:1.25fr .8fr .9fr;gap:6px;padding:8px 10px;border-top:1px solid var(--line);font:12px var(--mono);align-items:center;cursor:pointer}
+.pass:first-child{border-top:0}
+.pass:hover{background:rgba(148,163,184,.08)}
+.pass.sel{background:rgba(34,211,238,.08)}
+.pass small{display:block;color:var(--muted);font:10.5px var(--sans)}
+.pass.head{background:rgba(255,255,255,.03);font:600 10px var(--sans);color:var(--muted);letter-spacing:.06em;text-transform:uppercase;cursor:default}
+.elbar{height:4px;border-radius:4px;background:var(--panel-3);margin-top:4px;overflow:hidden}
+.elbar i{display:block;height:100%;background:linear-gradient(90deg,var(--accent-2),var(--accent))}
+.empty{color:var(--muted);text-align:center;padding:18px 10px;font-size:12px}
+.empty b{display:block;color:var(--text);font-weight:600;margin-bottom:4px}
+
+/* sky plot */
+.skywrap{display:flex;justify-content:center;background:radial-gradient(circle at center,rgba(34,211,238,.06),transparent 70%);border:1px solid var(--line);border-radius:12px;padding:8px}
+canvas#sky{width:300px;height:300px;cursor:pointer}
+
+/* conj */
+.prog{height:6px;background:var(--panel-3);border-radius:6px;overflow:hidden;margin-top:10px}
+.prog i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent-2),var(--accent));transition:width .2s}
+table.ct{width:100%;border-collapse:collapse;font:11.5px var(--mono);margin-top:8px}
+table.ct th{font:600 10px var(--sans);text-transform:uppercase;letter-spacing:.06em;color:var(--muted);text-align:left;padding:6px;border-bottom:1px solid var(--line)}
+table.ct td{padding:7px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+table.ct tr.r{cursor:pointer}
+table.ct tr.r:hover td{background:rgba(148,163,184,.08)}
+table.ct td small{display:block;color:var(--muted);font:10.5px var(--sans)}
+.risk-h{color:var(--bad);font-weight:600}.risk-m{color:var(--warn);font-weight:600}.risk-l{color:var(--ok)}
+
+/* events */
+.ev{display:flex;gap:10px;padding:8px 2px;border-bottom:1px solid var(--line);font-size:12px}
+.ev time{font:11px var(--mono);color:var(--muted);min-width:62px}
+.ev .ic{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;flex:none;font-size:11px;background:color-mix(in srgb,var(--c) 18%,transparent);color:var(--c)}
+
+/* legend, tooltip, toasts */
+#legend{position:fixed;left:402px;bottom:12px;z-index:9;display:flex;align-items:center;gap:4px;padding:5px;transition:left .25s}
+#left.collapsed~#legend{left:12px}
+.lg{display:flex;align-items:center;gap:7px;height:30px;padding:0 11px;border-radius:8px;cursor:pointer;border:0;background:transparent;color:var(--text);font-size:12px}
+.lg:hover{background:rgba(148,163,184,.12)}
+.lg.off{opacity:.38}
+.lg .c{font:11px var(--mono);color:var(--muted)}
+.lgl{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;padding:0 6px 0 8px}
+#credits{position:fixed;right:12px;bottom:10px;z-index:8;font-size:10px;color:var(--dim);text-align:right;max-width:40vw}
+#credits a{color:var(--muted)}
+#credits .cesium-credit-logoContainer{display:none!important}
+#credits .cesium-credit-textContainer{display:inline!important}
+#credits *{font-size:10px!important;color:var(--dim)!important}
+#tip{position:fixed;left:0;top:0;z-index:30;pointer-events:none;padding:7px 10px;border-radius:9px;background:rgba(2,6,15,.92);border:1px solid var(--line-2);font-size:12px;display:none;white-space:nowrap}
+#tip b{display:block}
+#tip small{color:var(--muted);font:11px var(--mono)}
+#toasts{position:fixed;right:12px;bottom:40px;z-index:40;display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+.toast{min-width:260px;max-width:360px;padding:10px 12px;border-radius:10px;background:rgba(9,14,26,.96);border:1px solid var(--line-2);border-left:3px solid var(--c,var(--accent));box-shadow:0 10px 30px rgba(0,0,0,.5);font-size:12.5px;animation:tin .25s ease-out}
+.toast b{display:block;margin-bottom:2px}
+@keyframes tin{from{opacity:0;transform:translateY(8px)}}
+
+/* overlay & modal */
+#loading{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,rgba(8,18,36,.75),rgba(2,4,10,.95));transition:opacity .5s}
+#loading.hide{opacity:0;pointer-events:none}
+.lcard{width:min(420px,calc(100vw - 32px));padding:26px 26px 22px;text-align:center}
+.lcard h1{font-size:18px;letter-spacing:.18em;margin:14px 0 4px}
+.lcard p{color:var(--muted);margin:0 0 16px}
+.orbitlogo{width:64px;height:64px;margin:0 auto;position:relative}
+.orbitlogo::before{content:'';position:absolute;inset:18px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#38bdf8,#0c4a6e)}
+.orbitlogo i{position:absolute;inset:4px;border:1.5px solid rgba(34,211,238,.5);border-radius:50%;transform:rotateX(70deg);animation:spin 3s linear infinite}
+.orbitlogo i::after{content:'';position:absolute;top:-4px;left:50%;width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent)}
+#loadMsg{font:12px var(--mono);color:var(--accent)}
+.modal{position:fixed;inset:0;z-index:90;background:rgba(2,4,10,.65);display:none;align-items:center;justify-content:center;padding:16px}
+.modal.on{display:flex}
+.mcard{width:min(760px,100%);max-height:calc(100vh - 40px);overflow:auto;padding:22px 24px}
+.mcard h2{margin:0 0 4px;font-size:18px}
+.gl{display:grid;grid-template-columns:1fr 1fr;gap:10px 18px;margin-top:8px}
+.gl div{font-size:12.5px;color:#c4d0e0}
+.gl b{color:var(--text)}
+kbd{font:11px var(--mono);border:1px solid var(--line-2);border-bottom-width:2px;border-radius:5px;padding:0 5px;color:var(--text)}
+#panelBtn{display:none}
+
+@media (max-width: 900px){
+  .brand span,.hide-sm{display:none}
+  #left{top:auto;height:46vh;width:auto;right:10px}
+  #left.collapsed{transform:translateY(calc(100% + 20px))}
+  #right{top:76px;left:10px;right:10px;width:auto;max-height:40vh}
+  #legend{display:none}
+  #panelBtn{display:inline-flex}
+  .gl{grid-template-columns:1fr}
+  #credits{display:none}
+}
+</style>
+</head>
+<body>
+<div id="globe"></div>
+
+<header class="topbar glass">
+  <div class="brand">
+    <svg width="30" height="30" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="7" fill="url(#g)"/><ellipse cx="16" cy="16" rx="14" ry="5.5" transform="rotate(-25 16 16)" stroke="#22d3ee" stroke-width="1.4" opacity=".8"/><circle cx="28.3" cy="11.2" r="2" fill="#22d3ee"/><defs><radialGradient id="g" cx=".35" cy=".35"><stop stop-color="#7dd3fc"/><stop offset="1" stop-color="#075985"/></radialGradient></defs></svg>
+    <div><b>ORBITAL WATCH</b><span>Space Situational Awareness</span></div>
+  </div>
+  <button class="btn icon" id="panelBtn" title="Toggle panel">☰</button>
+  <div class="clock"><div class="t" id="clkT">--:--:--</div><div class="d" id="clkD">UTC</div></div>
+  <button class="badge live" id="liveBadge" title="Click to return to real time (L)"><i></i><span>LIVE</span></button>
+  <div class="grp" title="Time controls">
+    <button class="btn" id="tBack" title="Jump back 1 hour">−1h</button>
+    <button class="btn icon" id="tPlay" title="Pause / play (Space)"></button>
+    <select class="sel mono" id="tSpeed" title="Simulation speed">
+      <option value="1">1×</option><option value="10">10×</option><option value="60">60×</option><option value="300">300×</option><option value="1800">1800×</option><option value="3600">3600×</option>
+    </select>
+    <button class="btn" id="tFwd" title="Jump forward 1 hour">+1h</button>
+  </div>
+  <div class="spacer"></div>
+  <div class="grp" id="viewSeg" title="View mode">
+    <button class="btn on" data-v="3d">3D</button><button class="btn" data-v="2d">2D</button><button class="btn" data-v="cv">2.5D</button>
+    <button class="btn icon" id="homeBtn" title="Reset camera (H)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8M5 10v10h14V10"/></svg></button>
+  </div>
+  <div class="grp hide-sm"><select class="sel" id="mapSel" title="Base map"></select></div>
+  <div class="grp">
+    <button class="btn on" id="tgLight" title="Day / night shading">☀<span class="hide-sm">Day/Night</span></button>
+    <button class="btn on" id="tgOrbits" title="Show orbits and ground tracks (O)">◯<span class="hide-sm">Orbits</span></button>
+  </div>
+  <button class="btn icon ghost" id="helpBtn" title="Guide & glossary (?)">?</button>
+</header>
+
+<aside id="left" class="glass">
+  <nav class="tabs">
+    <button class="tab on" data-tab="catalog">Catalog</button>
+    <button class="tab" data-tab="watch">Watchlist <span class="n" id="wCount">0</span></button>
+    <button class="tab" data-tab="observer">Observer</button>
+    <button class="tab" data-tab="conj">Conjunction</button>
+    <button class="tab" data-tab="events">Events <span class="n" id="eCount">0</span></button>
+  </nav>
+
+  <section class="pane on" id="pane-catalog">
+    <div class="stats">
+      <div class="stat"><div class="v" id="stTracked">0</div><div class="k">Objects loaded</div></div>
+      <div class="stat"><div class="v" id="stShown">0</div><div class="k">Displayed</div></div>
+      <div class="stat"><div class="v" id="stOver">0</div><div class="k">Above observer</div></div>
+    </div>
+    <div class="search">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/></svg>
+      <input id="q" placeholder="Search name, NORAD ID or COSPAR…" autocomplete="off" spellcheck="false">
+      <kbd>/</kbd>
+    </div>
+    <div class="status" id="qInfo"></div>
+    <div class="list" id="results"></div>
+
+    <details open id="layersBox"><summary>Layers <span class="hint" style="margin:0;font-weight:400">(combined)</span></summary><div id="layers"></div></details>
+    <details><summary>Filters & colors</summary><div>
+      <div class="field"><label>Object type</label><div class="chips" id="typeChips"></div></div>
+      <div class="field"><label>Color objects by</label>
+        <div class="chips"><button class="chip" data-cb="regime">Orbit regime</button><button class="chip" data-cb="type">Object type</button></div></div>
+    </div></details>
+    <details><summary>Import TLE / 3LE</summary><div>
+      <p class="hint">Paste your own element sets (name line optional). They appear in the “Custom import” layer.</p>
+      <textarea class="inp" id="tleIn" placeholder="ISS (ZARYA)&#10;1 25544U 98067A   ...&#10;2 25544  51.6400 ..."></textarea>
+      <div class="bar" style="margin-top:8px"><button class="btn solid" id="tleAdd">Add objects</button></div>
+    </div></details>
+    <div class="status" id="dataStatus"></div>
+  </section>
+
+  <section class="pane" id="pane-watch">
+    <p class="hint">Your tracked objects. Always visible on the globe, with live state, next pass and alerts.</p>
+    <div class="bar">
+      <input class="inp" id="wAdd" placeholder="Add by NORAD ID (e.g. 25544)" style="flex:1">
+      <button class="btn solid" id="wAddBtn">Add</button>
+    </div>
+    <div class="bar" style="margin:10px 0 12px;justify-content:space-between">
+      <button class="chip on" id="wTraces">Orbit traces</button>
+      <div class="bar"><button class="btn ghost" id="wExport" title="Download watchlist as JSON">Export</button><button class="btn ghost" id="wImport" title="Load a watchlist JSON">Import</button><input type="file" id="wFile" accept=".json,application/json" hidden></div>
+    </div>
+    <div id="wList"></div>
+  </section>
+
+  <section class="pane" id="pane-observer">
+    <h3>Ground site <span class="r"><button class="btn ghost" id="obsGeo" style="height:24px;font-size:11px">Use my location</button> <button class="btn ghost" id="obsPick" style="height:24px;font-size:11px">Pick on map</button></span></h3>
+    <div class="field"><label>Site name</label><input class="inp" id="obsName"></div>
+    <div class="f3">
+      <div class="field"><label>Latitude °</label><input class="inp mono" id="obsLat" type="number" step="0.0001"></div>
+      <div class="field"><label>Longitude °</label><input class="inp mono" id="obsLon" type="number" step="0.0001"></div>
+      <div class="field"><label>Altitude m</label><input class="inp mono" id="obsAlt" type="number" step="1"></div>
+    </div>
+    <h3>Sky view <span class="r" style="color:var(--dim)">Zenith at center · horizon at edge</span></h3>
+    <div class="skywrap"><canvas id="sky" width="600" height="600"></canvas></div>
+    <h3>Overhead now <span class="r mono" id="ovN"></span></h3>
+    <div id="overhead"></div>
+    <h3>Pass predictions</h3>
+    <div class="f2">
+      <div class="field"><label>Object</label><select class="inp" id="passSat"></select></div>
+      <div class="field"><label>Min. elevation</label><select class="inp" id="passMin"><option value="0">0° (any)</option><option value="10" selected>10°</option><option value="30">30° (good)</option><option value="60">60° (overhead)</option></select></div>
+    </div>
+    <div id="passList"></div>
+  </section>
+
+  <section class="pane" id="pane-conj">
+    <p class="hint">Screens one object against every loaded object and lists close approaches (conjunctions). The time of closest approach is called TCA.</p>
+    <div class="field"><label>Primary object</label><select class="inp" id="cjPrim"></select></div>
+    <div class="f2">
+      <div class="field"><label>Time window</label><select class="inp" id="cjWin"><option value="6">Next 6 h</option><option value="12" selected>Next 12 h</option><option value="24">Next 24 h</option><option value="48">Next 48 h</option></select></div>
+      <div class="field"><label>Miss distance under</label><select class="inp" id="cjThr"><option value="5">5 km</option><option value="10">10 km</option><option value="25" selected>25 km</option><option value="50">50 km</option><option value="100">100 km</option></select></div>
+    </div>
+    <div class="bar"><button class="btn solid" id="cjRun">Run screening</button><button class="btn ghost" id="cjStop" disabled>Cancel</button><button class="btn ghost" id="cjClear">Clear</button></div>
+    <div class="prog" id="cjProg" style="display:none"><i></i></div>
+    <div class="status" id="cjStatus"></div>
+    <div id="cjRes"></div>
+    <p class="hint" style="margin-top:14px;font-size:11px">Screening uses public TLEs and SGP4, which carry errors of roughly 1 km or more. It is useful for awareness only. Operational decisions need CDMs from Space-Track / 18 SDS.</p>
+  </section>
+
+  <section class="pane" id="pane-events">
+    <div class="bar" style="justify-content:space-between;margin-bottom:6px">
+      <button class="chip on" id="evToasts">Pop-up alerts</button>
+      <button class="btn ghost" id="evClear">Clear log</button>
+    </div>
+    <p class="hint">Live alerts for watchlist objects: horizon rises and sets over your site, eclipse entries and exits, plus data and screening activity.</p>
+    <div id="evList"></div>
+  </section>
+</aside>
+
+<aside id="right" class="glass"></aside>
+
+<div id="legend" class="glass"></div>
+<div id="credits"></div>
+<div id="tip"></div>
+<div id="toasts"></div>
+
+<div id="loading"><div class="lcard glass">
+  <div class="orbitlogo"><i></i></div>
+  <h1>ORBITAL WATCH</h1>
+  <p>Space Situational Awareness console</p>
+  <div id="loadMsg">Initializing globe…</div>
+  <div id="loadErr" style="display:none;margin-top:14px"></div>
+</div></div>
+
+<div class="modal" id="help"><div class="mcard glass">
+  <div class="bar" style="justify-content:space-between"><h2>Guide</h2><button class="btn icon" data-close>✕</button></div>
+  <p class="hint">Orbital Watch shows every tracked object from the public NORAD catalog (via CelesTrak) and moves it in real time with the SGP4 orbit model.</p>
+  <h3>Getting around</h3>
+  <div class="gl">
+    <div><b>Click a dot</b> to see what it is, where it is and where it goes next.</div>
+    <div><b>Star ★</b> an object to add it to your Watchlist and get alerts for it.</div>
+    <div><b>Layers</b> choose which families of objects are drawn. Layers combine, so turn off “All active” to see only one family.</div>
+    <div><b>Legend</b> (bottom) filters by orbit regime. Click a color to hide or show it.</div>
+    <div><b>Observer</b> sets your ground site. It shows what is overhead now and predicts passes.</div>
+    <div><b>Conjunction</b> finds objects that will come close to one of yours.</div>
+  </div>
+  <h3>Orbit regimes</h3>
+  <div class="gl">
+    <div><b style="color:#38bdf8">LEO</b> Low Earth Orbit, below 2,000 km. ISS, Starlink, imaging satellites. One lap takes about 90 to 120 minutes.</div>
+    <div><b style="color:#a78bfa">MEO</b> Medium Earth Orbit, 2,000 to 35,000 km. Navigation (GPS, Galileo, GLONASS, BeiDou).</div>
+    <div><b style="color:#fbbf24">GEO</b> Geosynchronous, about 35,786 km. One lap per day, so these hover over one longitude. Used for TV, weather and communications.</div>
+    <div><b style="color:#f472b6">HEO</b> Highly elliptical. Swings close to Earth, then far out. Used for Molniya and transfer orbits.</div>
+  </div>
+  <h3>Glossary</h3>
+  <div class="gl">
+    <div><b>NORAD ID</b>: catalog number of the object (ISS = 25544).</div>
+    <div><b>COSPAR ID</b>: international designator (launch year, launch number, piece).</div>
+    <div><b>Apogee / Perigee</b>: highest and lowest altitude of the orbit.</div>
+    <div><b>Inclination</b>: tilt of the orbit relative to the equator. 90° passes over the poles.</div>
+    <div><b>Azimuth / Elevation</b>: compass direction and angle above your horizon.</div>
+    <div><b>TLE</b>: Two-Line Element set, the public orbit description. Older TLEs are less accurate.</div>
+    <div><b>Eclipse</b>: the object is in Earth's shadow. Sunlit objects can be seen at dusk and dawn.</div>
+    <div><b>TCA / miss distance</b>: time and distance of closest approach between two objects.</div>
+  </div>
+  <h3>Keyboard</h3>
+  <div class="gl">
+    <div><kbd>Space</kbd> pause / play · <kbd>L</kbd> go live</div>
+    <div><kbd>/</kbd> search · <kbd>Esc</kbd> deselect</div>
+    <div><kbd>F</kbd> follow selected · <kbd>W</kbd> watch / unwatch selected</div>
+    <div><kbd>O</kbd> toggle orbits · <kbd>H</kbd> reset camera</div>
+  </div>
+</div></div>
+
+<script>
+(() => {
+'use strict';
+/* =========================================================================
+   Constants & helpers
+   ========================================================================= */
+const RE = 6378.137, MU = 398600.4418, RAD = Math.PI / 180, DEG = 180 / Math.PI;
+const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } },
+  del(k) { try { localStorage.removeItem(k); } catch {} }
+};
+const fmtN = n => n.toLocaleString('en-US');
+const pad = n => String(n).padStart(2, '0');
+const hms = d => d.toISOString().slice(11, 19);
+const hm = d => d.toISOString().slice(11, 16);
+const ymdhm = d => d.toISOString().slice(0, 16).replace('T', ' ');
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], MONS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const longDate = d => `${DAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+const dur = ms => { const s = Math.abs(ms) / 1000; if (s < 60) return Math.round(s) + 's'; const m = s / 60; if (m < 60) return Math.floor(m) + 'm ' + pad(Math.floor(s % 60)) + 's'; const h = m / 60; if (h < 48) return Math.floor(h) + 'h ' + pad(Math.floor(m % 60)) + 'm'; return Math.floor(h / 24) + 'd ' + Math.floor(h % 24) + 'h'; };
+const rel = ms => ms >= 0 ? 'in ' + dur(ms) : dur(ms) + ' ago';
+const COMPASS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+const compass = az => COMPASS[Math.round(((az % 360) + 360) % 360 / 22.5) % 16];
+const latStr = v => `${Math.abs(v).toFixed(2)}° ${v >= 0 ? 'N' : 'S'}`;
+const lonStr = v => `${Math.abs(v).toFixed(2)}° ${v >= 0 ? 'E' : 'W'}`;
+
+const I = {
+  star: '<svg width="15" height="15" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2.8l2.8 5.9 6.4.8-4.7 4.4 1.2 6.4L12 17.2l-5.7 3.1 1.2-6.4L2.8 9.5l6.4-.8z"/></svg>',
+  starO: '<svg width="15" height="15" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M12 2.8l2.8 5.9 6.4.8-4.7 4.4 1.2 6.4L12 17.2l-5.7 3.1 1.2-6.4L2.8 9.5l6.4-.8z"/></svg>',
+  play: '<svg width="13" height="13" viewBox="0 0 24 24"><path fill="currentColor" d="M6 4v16l14-8z"/></svg>',
+  pause: '<svg width="13" height="13" viewBox="0 0 24 24"><path fill="currentColor" d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>',
+  x: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  target: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><path d="M12 1v4M12 19v4M1 12h4M19 12h4"/></svg>',
+  fly: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3a15 15 0 010 18M3 12h18"/></svg>',
+  orbit: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="12" rx="10" ry="4.5" transform="rotate(-25 12 12)"/><circle cx="12" cy="12" r="2.5"/></svg>',
+  pass: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 19h18M5 19a7 7 0 0114 0"/><path d="M12 4v3"/></svg>',
+  conj: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20L20 4M4 4l16 16"/><circle cx="12" cy="12" r="3"/></svg>',
+  trash: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>'
+};
+
+const REG = {
+  LEO: { c: '#38bdf8', name: 'LEO', tip: 'Low Earth Orbit · < 2,000 km' },
+  MEO: { c: '#a78bfa', name: 'MEO', tip: 'Medium Earth Orbit · 2,000–35,000 km' },
+  GEO: { c: '#fbbf24', name: 'GEO', tip: 'Geosynchronous · ~35,786 km' },
+  HEO: { c: '#f472b6', name: 'HEO', tip: 'Highly elliptical orbit' }
+};
+const TYP = {
+  PAY: { c: '#34d399', name: 'Payload' },
+  RB: { c: '#fb923c', name: 'Rocket body' },
+  DEB: { c: '#f87171', name: 'Debris' }
+};
+const GROUPS = [
+  { sec: 'Catalog', items: [['active', 'All active satellites'], ['stations', 'Space stations'], ['visual', '100 brightest'], ['last-30-days', 'Launched in last 30 days']] },
+  { sec: 'Constellations', items: [['starlink', 'Starlink'], ['oneweb', 'OneWeb'], ['iridium-NEXT', 'Iridium NEXT'], ['planet', 'Planet']] },
+  { sec: 'Navigation', items: [['gps-ops', 'GPS'], ['galileo', 'Galileo'], ['glo-ops', 'GLONASS'], ['beidou', 'BeiDou']] },
+  { sec: 'Missions', items: [['geo', 'Geostationary'], ['weather', 'Weather'], ['resource', 'Earth observation'], ['science', 'Science'], ['military', 'Military'], ['cubesat', 'CubeSats'], ['amateur', 'Amateur radio']] },
+  { sec: 'Debris fields', items: [['cosmos-1408-debris', 'Cosmos 1408 (2021 ASAT)'], ['fengyun-1c-debris', 'Fengyun-1C (2007 ASAT)'], ['iridium-33-debris', 'Iridium 33 collision'], ['cosmos-2251-debris', 'Cosmos 2251 collision']] },
+  { sec: 'Local', items: [['custom', 'Custom import']] }
+];
+const GLABEL = Object.fromEntries(GROUPS.flatMap(g => g.items));
+const FEATURED = ['25544', '48274', '20580', '43013', '33591', '41866', '28654'];
+const CELESTRAK = 'https://celestrak.org/NORAD/elements/gp.php';
+
+/* =========================================================================
+   State
+   ========================================================================= */
+const savedWatch = store.get('ssa.watch', null);
+const S = {
+  sats: [], byId: new Map(),
+  layers: new Set(store.get('ssa.layers', ['active'])),
+  loaded: new Set(), loading: new Set(), meta: {},
+  regimes: new Set(['LEO', 'MEO', 'GEO', 'HEO']),
+  types: new Set(['PAY', 'RB', 'DEB']),
+  colorBy: store.get('ssa.colorBy', 'regime'),
+  selected: null, follow: false,
+  watch: new Map((savedWatch || [{ norad: '25544', name: 'ISS (ZARYA)' }, { norad: '48274', name: 'CSS (TIANHE)' }, { norad: '20580', name: 'HST' }]).map(w => [w.norad, w])),
+  watchTraces: store.get('ssa.watchTraces', true),
+  showOrbits: true,
+  observer: store.get('ssa.observer', { name: 'Abu Dhabi', lat: 24.4539, lon: 54.3773, alt: 10 }),
+  sky: [], events: [], toasts: store.get('ssa.toasts', true),
+  pickObserver: false, passSel: null
+};
+S.layers.delete('custom');
+
+/* =========================================================================
+   Cesium viewer
+   ========================================================================= */
+const viewer = new Cesium.Viewer('globe', {
+  baseLayer: Cesium.ImageryLayer.fromProviderAsync(Cesium.TileMapServiceImageryProvider.fromUrl(Cesium.buildModuleUrl('Assets/Textures/NaturalEarthII'))),
+  animation: false, timeline: false, baseLayerPicker: false, geocoder: false, homeButton: false, sceneModePicker: false,
+  navigationHelpButton: false, fullscreenButton: false, infoBox: false, selectionIndicator: false,
+  creditContainer: document.getElementById('credits'), shouldAnimate: true
+});
+const scene = viewer.scene, clock = viewer.clock;
+scene.globe.enableLighting = true;
+scene.globe.baseColor = Cesium.Color.fromCssColorString('#0b1220');
+scene.fog.enabled = false;
+clock.currentTime = Cesium.JulianDate.now();
+clock.clockStep = Cesium.ClockStep.SYSTEM_CLOCK_MULTIPLIER;
+clock.clockRange = Cesium.ClockRange.UNBOUNDED;
+clock.multiplier = 1;
+clock.shouldAnimate = true;
+viewer.cesiumWidget.screenSpaceEventHandler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
+const HOME = () => Cesium.Cartesian3.fromDegrees(S.observer.lon, Math.max(-60, Math.min(60, S.observer.lat)), 2.4e7);
+viewer.camera.setView({ destination: HOME() });
+
+const MAPS = {
+  ne: { name: 'Natural Earth', make: () => Cesium.TileMapServiceImageryProvider.fromUrl(Cesium.buildModuleUrl('Assets/Textures/NaturalEarthII')) },
+  esri: { name: 'Satellite imagery', make: async () => new Cesium.UrlTemplateImageryProvider({ url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', maximumLevel: 18, credit: 'Imagery © Esri, Maxar, Earthstar Geographics' }) },
+  dark: { name: 'Dark', make: async () => new Cesium.UrlTemplateImageryProvider({ url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png', subdomains: 'abcd', maximumLevel: 18, credit: '© OpenStreetMap contributors © CARTO' }) },
+  osm: { name: 'Streets', make: async () => new Cesium.OpenStreetMapImageryProvider({ url: 'https://tile.openstreetmap.org/' }) }
+};
+async function setMap(k) {
+  if (!MAPS[k]) k = 'ne';
+  try {
+    const p = await MAPS[k].make();
+    viewer.imageryLayers.removeAll();
+    viewer.imageryLayers.addImageryProvider(p);
+    store.set('ssa.map', k);
+    $('#mapSel').value = k;
+  } catch (e) { toast('Map error', e.message, 'var(--bad)'); }
+}
+
+const points = scene.primitives.add(new Cesium.PointPrimitiveCollection());
+const SCALE = new Cesium.NearFarScalar(1.5e6, 1.7, 6e7, 0.85);
+const colCache = {};
+const C = (hex, a = 1) => { const k = hex + a; return colCache[k] || (colCache[k] = Cesium.Color.fromCssColorString(hex).withAlpha(a)); };
+const hexOf = s => S.colorBy === 'type' ? TYP[s.type].c : REG[s.regime].c;
+const simDate = () => Cesium.JulianDate.toDate(clock.currentTime);
+
+/* =========================================================================
+   Orbit model
+   ========================================================================= */
+function buildSat(name, l1, l2) {
+  let rec;
+  try { rec = satellite.twoline2satrec(l1, l2); } catch { return null; }
+  if (!rec || rec.error || !rec.no) return null;
+  const norad = l1.substring(2, 7).trim().replace(/^0+(?=\d)/, '');
+  const s = { name: (name || '').replace(/^0\s+/, '').trim() || 'NORAD ' + norad, norad, l1, l2, rec };
+  const n = rec.no / 60, a = Math.cbrt(MU / (n * n)), e = rec.ecco;
+  Object.assign(s, {
+    a, e, inc: rec.inclo * DEG, raan: rec.nodeo * DEG, argp: rec.argpo * DEG, period: 2 * Math.PI / rec.no,
+    apo: a * (1 + e) - RE, peri: a * (1 - e) - RE, bstar: rec.bstar,
+    epoch: new Date((rec.jdsatepoch - 2440587.5) * 864e5)
+  });
+  s.revday = 1440 / s.period;
+  const id = l1.substring(9, 17).trim(), yy = parseInt(id.slice(0, 2), 10);
+  s.cospar = id ? (isNaN(yy) ? id : `${yy < 57 ? 2000 + yy : 1900 + yy}-${id.slice(2)}`) : '—';
+  s.regime = e >= 0.25 ? 'HEO' : (a - RE) < 2000 ? 'LEO' : (s.period > 1300 && s.period < 1600) ? 'GEO' : (a - RE) < 34000 ? 'MEO' : 'GEO';
+  const N = s.name.toUpperCase();
+  s.type = /\bDEB\b|DEBRIS|COOLANT|\bFRAG/.test(N) ? 'DEB' : /R\/B|ROCKET BODY|\bAKM\b|\bPKM\b|\bPAM\b/.test(N) ? 'RB' : 'PAY';
+  return s;
+}
+
+function upsert(name, l1, l2, group) {
+  const id = l1.substring(2, 7).trim().replace(/^0+(?=\d)/, '');
+  let s = S.byId.get(id);
+  if (s) {
+    if (group) s.groups.add(group);
+    if (l1 !== s.l1) {
+      const n = buildSat(name, l1, l2);
+      if (n && n.rec.jdsatepoch >= s.rec.jdsatepoch) { Object.assign(s, n); s.pt.color = C(hexOf(s), .92); }
+    }
+    return s;
+  }
+  s = buildSat(name, l1, l2);
+  if (!s) return null;
+  s.i = S.sats.length; s.groups = new Set(group ? [group] : []); s.want = false;
+  s.pt = points.add({ position: Cesium.Cartesian3.ZERO, pixelSize: 3, color: C(hexOf(s), .92), show: false, id: s.i, scaleByDistance: SCALE });
+  S.sats.push(s); S.byId.set(id, s);
+  return s;
+}
+
+function parseTLE(text) {
+  const L = text.split(/\r?\n/).map(l => l.replace(/\s+$/, '')).filter(Boolean), out = [];
+  for (let i = 0; i < L.length; i++) {
+    if (L[i].startsWith('1 ') && L[i + 1] && L[i + 1].startsWith('2 ')) {
+      const nm = i > 0 && !L[i - 1].startsWith('1 ') && !L[i - 1].startsWith('2 ') ? L[i - 1] : '';
+      out.push([nm.trim(), L[i], L[i + 1]]); i++;
+    }
+  }
+  return out;
+}
+
+function stateAt(s, date) {
+  const pv = satellite.propagate(s.rec, date);
+  const p = pv && pv.position;
+  if (!p || isNaN(p.x)) return null;
+  const g = satellite.gstime(date);
+  return { eci: p, vel: pv.velocity, ecf: satellite.eciToEcf(p, g), gmst: g };
+}
+function cartAt(s, time, result) {
+  if (!s) return undefined;
+  const r = stateAt(s, Cesium.JulianDate.toDate(time));
+  return r ? Cesium.Cartesian3.fromElements(r.ecf.x * 1000, r.ecf.y * 1000, r.ecf.z * 1000, result) : undefined;
+}
+const tsince = (rec, ms) => (ms / 864e5 + 2440587.5 - rec.jdsatepoch) * 1440;
+
+let sunCache = { t: 0, v: null };
+function sunEci(date) {
+  const t = Math.round(date.getTime() / 1000);
+  if (sunCache.t === t) return sunCache.v;
+  const p = Cesium.Simon1994PlanetaryPositions.computeSunPositionInEarthInertialFrame(Cesium.JulianDate.fromDate(date));
+  sunCache = { t, v: { x: p.x / 1000, y: p.y / 1000, z: p.z / 1000 } };
+  return sunCache.v;
+}
+function sunlit(eci, sun) {
+  const l = Math.hypot(sun.x, sun.y, sun.z), ux = sun.x / l, uy = sun.y / l, uz = sun.z / l;
+  const pr = eci.x * ux + eci.y * uy + eci.z * uz;
+  if (pr > 0) return true;
+  return Math.hypot(eci.x - pr * ux, eci.y - pr * uy, eci.z - pr * uz) > RE;
+}
+function sunElevation(date) {
+  const s = sunEci(date), g = satellite.gstime(date);
+  const ecf = { x: s.x * Math.cos(g) + s.y * Math.sin(g), y: -s.x * Math.sin(g) + s.y * Math.cos(g), z: s.z };
+  return satellite.ecfToLookAngles(obsGd(), ecf).elevation * DEG;
+}
+const obsGd = () => ({ longitude: S.observer.lon * RAD, latitude: S.observer.lat * RAD, height: (S.observer.alt || 0) / 1000 });
+
+/* =========================================================================
+   Data (CelesTrak GP)
+   ========================================================================= */
+async function fetchText(url) {
+  const r = await fetch(url);
+  const t = await r.text();
+  if (!r.ok) throw new Error(t.trim().slice(0, 140) || 'HTTP ' + r.status);
+  return t;
+}
+async function fetchGroup(g, forceNet = false) {
+  const key = 'ssa.tle.' + g, cached = store.get(key, null);
+  if (cached && !forceNet && Date.now() - cached.t < 2 * 3600e3) return cached;
+  try {
+    const text = await fetchText(`${CELESTRAK}?GROUP=${encodeURIComponent(g)}&FORMAT=tle`);
+    if (!/\n1 /.test(text)) throw new Error(text.trim().slice(0, 140) || 'Empty response');
+    const rec = { t: Date.now(), text };
+    if (!store.set(key, rec)) { for (const k of GROUPS.flatMap(x => x.items.map(i => i[0]))) if (k !== g && k !== 'active') store.del('ssa.tle.' + k); store.set(key, rec); }
+    return rec;
+  } catch (e) {
+    if (cached) return { ...cached, stale: true };
+    throw e;
+  }
+}
+async function loadLayer(g, forceNet = false) {
+  if (g === 'custom' || S.loading.has(g) || (S.loaded.has(g) && !forceNet)) return;
+  S.loading.add(g); renderLayers();
+  try {
+    const r = await fetchGroup(g, forceNet);
+    let n = 0;
+    for (const [nm, a, b] of parseTLE(r.text)) if (upsert(nm, a, b, g)) n++;
+    S.loaded.add(g); S.meta[g] = { n, t: r.t };
+    if (r.stale) toast('Using cached data', `${GLABEL[g]}: CelesTrak unreachable, showing data from ${rel(r.t - Date.now())}.`, 'var(--warn)');
+  } catch (e) {
+    S.layers.delete(g); store.set('ssa.layers', [...S.layers]);
+    toast('Could not load ' + (GLABEL[g] || g), e.message, 'var(--bad)');
+    logEvent('err', `Failed to load layer “${GLABEL[g] || g}”: ${e.message}`);
+    throw e;
+  } finally {
+    S.loading.delete(g); renderLayers(); applyVisibility(); updateDataStatus(); runSearch();
+  }
+}
+async function fetchCatnr(norad) {
+  const text = await fetchText(`${CELESTRAK}?CATNR=${encodeURIComponent(norad)}&FORMAT=tle`);
+  const recs = parseTLE(text);
+  if (!recs.length) throw new Error(text.trim().slice(0, 100) || 'No element set found');
+  return upsert(recs[0][0], recs[0][1], recs[0][2], '_watch');
+}
+
+/* =========================================================================
+   Visibility, colors & propagation loop
+   ========================================================================= */
+function isWanted(s) {
+  if (S.watch.has(s.norad)) return true;
+  if (!S.regimes.has(s.regime) || !S.types.has(s.type)) return false;
+  for (const g of s.groups) if (S.layers.has(g)) return true;
+  return false;
+}
+function applyVisibility() {
+  let shown = 0;
+  const cnt = { LEO: 0, MEO: 0, GEO: 0, HEO: 0 }, tc = { PAY: 0, RB: 0, DEB: 0 };
+  for (const s of S.sats) {
+    s.want = isWanted(s);
+    if (!s.want) s.pt.show = false; else shown++;
+    let inLayer = false; for (const g of s.groups) if (S.layers.has(g)) { inLayer = true; break; }
+    if (inLayer || S.watch.has(s.norad)) { cnt[s.regime]++; tc[s.type]++; }
+    s.pt.pixelSize = S.watch.has(s.norad) ? 5 : 3;
+  }
+  S.counts = cnt; S.tcounts = tc;
+  $('#stTracked').textContent = fmtN(S.sats.length);
+  $('#stShown').textContent = fmtN(shown);
+  renderLegend(); renderTypeChips();
+  forceProp = true;
+}
+function recolor() { for (const s of S.sats) s.pt.color = C(hexOf(s), .92); renderLegend(); runSearch(); }
+
+let forceProp = true, lastProp = 0, propMs = 8, lastSim = 0, lastUi = 0, lastClock = 0;
+const scratch = new Cesium.Cartesian3();
+function propagateAll() {
+  const date = simDate(), g = satellite.gstime(date), obs = obsGd(), sky = [];
+  for (const s of S.sats) {
+    if (!s.want) continue;
+    const pv = satellite.propagate(s.rec, date), p = pv && pv.position;
+    if (!p || isNaN(p.x)) { s.pt.show = false; s.dead = true; continue; }
+    s.dead = false;
+    const e = satellite.eciToEcf(p, g);
+    s.ecf = e; s.pt.show = true;
+    scratch.x = e.x * 1000; scratch.y = e.y * 1000; scratch.z = e.z * 1000;
+    s.pt.position = scratch;
+    const la = satellite.ecfToLookAngles(obs, e);
+    if (la.elevation > 0) sky.push({ s, az: la.azimuth * DEG, el: la.elevation * DEG, rng: la.rangeSat });
+  }
+  sky.sort((a, b) => b.el - a.el);
+  S.sky = sky;
+}
+scene.preRender.addEventListener(() => {
+  const now = performance.now(), simMs = clock.currentTime ? Cesium.JulianDate.toDate(clock.currentTime).getTime() : 0;
+  const fast = clock.shouldAnimate && Math.abs(clock.multiplier) > 1;
+  const interval = fast ? Math.max(90, propMs * 4) : 1000;
+  if (forceProp || (now - lastProp >= interval && simMs !== lastSim)) {
+    const t0 = performance.now();
+    propagateAll();
+    propMs = propMs * .7 + (performance.now() - t0) * .3;
+    lastProp = now; lastSim = simMs;
+    updateTraces(forceProp);
+    if (forceProp || now - lastUi > (fast ? 400 : 900)) { lastUi = now; liveUi(); }
+    forceProp = false;
+  }
+  if (now - lastClock > 200) { lastClock = now; updateClock(); }
+});
+
+/* =========================================================================
+   Selection, entities & traces
+   ========================================================================= */
+const selEnt = viewer.entities.add({
+  show: false,
+  position: new Cesium.CallbackProperty((t, r) => cartAt(S.selected, t, r), false),
+  point: { pixelSize: 12, color: Cesium.Color.WHITE, outlineColor: new Cesium.CallbackProperty(() => S.selected ? C(hexOf(S.selected)) : Cesium.Color.WHITE, false), outlineWidth: 3 },
+  label: {
+    text: new Cesium.CallbackProperty(() => S.selected ? S.selected.name : '', false), font: '600 13px Inter, sans-serif',
+    fillColor: Cesium.Color.WHITE, showBackground: true, backgroundColor: C('#020617', .8), backgroundPadding: new Cesium.Cartesian2(8, 5),
+    pixelOffset: new Cesium.Cartesian2(0, -22), verticalOrigin: Cesium.VerticalOrigin.BOTTOM
+  },
+  viewFrom: new Cesium.Cartesian3(-2.2e6, -2.2e6, 1.6e6)
+});
+const obsEnt = viewer.entities.add({
+  position: new Cesium.CallbackProperty(() => Cesium.Cartesian3.fromDegrees(S.observer.lon, S.observer.lat, S.observer.alt || 0), false),
+  point: { pixelSize: 9, color: C('#22d3ee'), outlineColor: Cesium.Color.WHITE, outlineWidth: 2 },
+  label: {
+    text: new Cesium.CallbackProperty(() => '⌖ ' + (S.observer.name || 'Observer'), false), font: '600 12px Inter, sans-serif', fillColor: C('#a5f3fc'),
+    outlineColor: Cesium.Color.BLACK, outlineWidth: 3, style: Cesium.LabelStyle.FILL_AND_OUTLINE, pixelOffset: new Cesium.Cartesian2(0, -16),
+    verticalOrigin: Cesium.VerticalOrigin.BOTTOM, distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 3.5e7)
+  }
+});
+const watchEnts = new Map();
+function syncWatchEntities() {
+  for (const [id, ent] of watchEnts) if (!S.watch.has(id) || !S.byId.has(id)) { viewer.entities.remove(ent); watchEnts.delete(id); removeTrace('w:' + id); }
+  for (const id of S.watch.keys()) {
+    const s = S.byId.get(id);
+    if (!s || watchEnts.has(id)) continue;
+    const ent = viewer.entities.add({
+      position: new Cesium.CallbackProperty((t, r) => cartAt(s, t, r), false),
+      point: { pixelSize: 8, color: new Cesium.CallbackProperty(() => C(hexOf(s)), false), outlineColor: Cesium.Color.WHITE, outlineWidth: 1.5 },
+      label: {
+        text: s.name, font: '500 12px Inter, sans-serif', fillColor: Cesium.Color.WHITE, outlineColor: Cesium.Color.BLACK, outlineWidth: 3,
+        style: Cesium.LabelStyle.FILL_AND_OUTLINE, pixelOffset: new Cesium.Cartesian2(10, 0), horizontalOrigin: Cesium.HorizontalOrigin.LEFT,
+        show: new Cesium.CallbackProperty(() => S.selected !== s, false)
+      }
+    });
+    ent.satRef = s; watchEnts.set(id, ent);
+    setTrace('w:' + id, s, false);
+  }
+}
+
+const traces = new Map();
+function setTrace(key, s, primary) {
+  removeTrace(key);
+  const tr = { s, primary, orbit: [], past: [], fut: [], foot: [], t: 0, sim: 0, ents: [] };
+  const col = () => C(hexOf(s));
+  const vis = kind => new Cesium.CallbackProperty(() => {
+    if (!S.showOrbits) return false;
+    if (!primary && (!S.watchTraces || S.selected === s)) return false;
+    if (kind === 'orbit') return scene.mode === Cesium.SceneMode.SCENE3D;
+    return true;
+  }, false);
+  const add = (kind, width, material) => {
+    const e = viewer.entities.add({ polyline: { positions: new Cesium.CallbackProperty(() => tr[kind], false), width, material, show: vis(kind), arcType: Cesium.ArcType.NONE } });
+    e.satRef = s; tr.ents.push(e);
+  };
+  if (primary) {
+    add('orbit', 3, new Cesium.PolylineGlowMaterialProperty({ glowPower: .18, color: new Cesium.CallbackProperty(() => col().withAlpha(.95), false) }));
+    add('fut', 2, new Cesium.ColorMaterialProperty(new Cesium.CallbackProperty(() => col().withAlpha(.9), false)));
+    add('past', 1.5, new Cesium.PolylineDashMaterialProperty({ color: new Cesium.CallbackProperty(() => col().withAlpha(.55), false), dashLength: 12 }));
+    add('foot', 1.2, new Cesium.ColorMaterialProperty(C('#e2e8f0', .45)));
+  } else {
+    add('orbit', 1.3, new Cesium.ColorMaterialProperty(new Cesium.CallbackProperty(() => col().withAlpha(.5), false)));
+    add('fut', 1, new Cesium.ColorMaterialProperty(new Cesium.CallbackProperty(() => col().withAlpha(.35), false)));
+  }
+  traces.set(key, tr);
+  computeTrace(tr, simDate());
+}
+function removeTrace(key) { const tr = traces.get(key); if (!tr) return; tr.ents.forEach(e => viewer.entities.remove(e)); traces.delete(key); }
+function computeTrace(tr, date) {
+  const s = tr.s, P = s.period * 60e3, t0 = date.getTime(), g0 = satellite.gstime(date);
+  const N = tr.primary ? 260 : 140, orbit = [], past = [], fut = [];
+  for (let k = 0; k <= N; k++) {
+    const pv = satellite.propagate(s.rec, new Date(t0 + k * P / N)), p = pv && pv.position;
+    if (!p || isNaN(p.x)) continue;
+    const e = satellite.eciToEcf(p, g0);
+    orbit.push(new Cesium.Cartesian3(e.x * 1000, e.y * 1000, e.z * 1000));
+  }
+  const ground = (from, to, n, out) => {
+    for (let k = 0; k <= n; k++) {
+      const d = new Date(from + (to - from) * k / n), r = stateAt(s, d);
+      if (!r) continue;
+      const gd = satellite.eciToGeodetic(r.eci, r.gmst);
+      out.push(Cesium.Cartesian3.fromRadians(gd.longitude, gd.latitude, 6000));
+    }
+  };
+  ground(t0, t0 + P, tr.primary ? 300 : 160, fut);
+  if (tr.primary) ground(t0 - P * .5, t0, 150, past);
+  tr.orbit = orbit; tr.fut = fut; tr.past = past;
+  if (tr.primary) {
+    const r = stateAt(s, date);
+    if (r) { const gd = satellite.eciToGeodetic(r.eci, r.gmst); tr.foot = footprint(gd.latitude, gd.longitude, gd.height); }
+  }
+  tr.t = performance.now(); tr.sim = t0;
+}
+function footprint(lat, lon, alt) {
+  const lam = Math.acos(RE / (RE + Math.max(alt, 1))), out = [];
+  for (let b = 0; b <= 360; b += 4) {
+    const br = b * RAD, lat2 = Math.asin(Math.sin(lat) * Math.cos(lam) + Math.cos(lat) * Math.sin(lam) * Math.cos(br));
+    const lon2 = lon + Math.atan2(Math.sin(br) * Math.sin(lam) * Math.cos(lat), Math.cos(lam) - Math.sin(lat) * Math.sin(lat2));
+    out.push(Cesium.Cartesian3.fromRadians(lon2, lat2, 8000));
+  }
+  return out;
+}
+function updateTraces(force) {
+  if (!S.showOrbits) return;
+  const now = performance.now(), d = simDate(), t = d.getTime();
+  for (const tr of traces.values()) {
+    if (!tr.primary && !S.watchTraces) continue;
+    const dt = Math.abs(t - tr.sim), real = now - tr.t;
+    if (force || (real > 1500 && dt > 0) || (real > 150 && dt > 90e3)) computeTrace(tr, d);
+  }
+}
+
+function select(s, opts = {}) {
+  if (S.selected === s && !opts.force) { if (opts.fly) flyTo(s); return; }
+  S.selected = s; S.passSel = null;
+  if (!s) {
+    selEnt.show = false; removeTrace('sel'); setFollow(false);
+    $('#right').classList.remove('on'); $('#right').innerHTML = '';
+    highlightLists(); return;
+  }
+  selEnt.show = true;
+  setTrace('sel', s, true);
+  s._passes = null;
+  renderDetails(); liveUi();
+  if (opts.fly) flyTo(s);
+  if (opts.fly && innerWidth < 900) $('#left').classList.add('collapsed');
+  if (S.follow) viewer.trackedEntity = selEnt;
+  highlightLists();
+  if ($('#pane-observer').classList.contains('on')) { $('#passSat').value = s.norad; renderPasses(); }
+}
+function flyTo(s) {
+  const r = stateAt(s, simDate());
+  if (!r) return;
+  const gd = satellite.eciToGeodetic(r.eci, r.gmst), h = gd.height * 1000;
+  if (S.follow) return;
+  viewer.camera.flyTo({ destination: Cesium.Cartesian3.fromRadians(gd.longitude, gd.latitude, h + Math.max(4e6, h * 0.9)), duration: 1.6 });
+}
+function setFollow(on) {
+  S.follow = on;
+  viewer.trackedEntity = on && S.selected ? selEnt : undefined;
+  const b = $('#dFollow'); if (b) b.classList.toggle('on', on);
+  if (!on && S.selected == null) viewer.trackedEntity = undefined;
+}
+
+/* =========================================================================
+   Details panel
+   ========================================================================= */
+function plainSummary(s) {
+  const p = s.period < 120 ? `${s.period.toFixed(1)} minutes` : s.period < 2880 ? `${(s.period / 60).toFixed(1)} hours` : `${(s.period / 1440).toFixed(1)} days`;
+  const what = s.type === 'DEB' ? 'This piece of debris' : s.type === 'RB' ? 'This spent rocket stage' : 'This satellite';
+  if (s.regime === 'GEO' && s.e < .05 && s.inc < 5) return `${what} is geostationary. It completes one lap per day, so it hovers over one spot on the equator at about ${fmtN(Math.round(s.apo))} km.`;
+  if (s.regime === 'HEO') return `${what} flies a highly elliptical orbit. It dips to ${fmtN(Math.round(s.peri))} km, then climbs out to ${fmtN(Math.round(s.apo))} km. One lap takes ${p}.`;
+  const tilt = s.inc > 95 ? `a retrograde orbit tilted ${s.inc.toFixed(1)}°. This is typical of sun-synchronous imaging satellites` : s.inc > 80 ? `a near-polar orbit (${s.inc.toFixed(1)}°), so it passes over almost the whole Earth` : `an orbit tilted ${s.inc.toFixed(1)}° to the equator, so it covers latitudes up to ±${Math.min(90, s.inc).toFixed(0)}°`;
+  return `${what} circles Earth every ${p} at about ${fmtN(Math.round((s.apo + s.peri) / 2))} km altitude, on ${tilt}.`;
+}
+const kvCell = (label, id, tip, val = '—') => `<div><small ${tip ? `data-tip="${esc(tip)}"` : ''}>${label}</small><span id="${id}">${val}</span></div>`;
+function renderDetails() {
+  const s = S.selected; if (!s) return;
+  const watched = S.watch.has(s.norad), age = (simDate() - s.epoch) / 864e5;
+  const ageCol = Math.abs(age) > 14 ? 'var(--bad)' : Math.abs(age) > 5 ? 'var(--warn)' : 'var(--ok)';
+  const groups = [...s.groups].filter(g => GLABEL[g]).map(g => GLABEL[g]).join(', ') || 'Watchlist';
+  $('#right').innerHTML = `
+  <div class="dhead"><span class="dot" style="color:${hexOf(s)};background:${hexOf(s)}"></span>
+    <div style="flex:1;min-width:0"><h2>${esc(s.name)}</h2><div class="sub">NORAD ${s.norad} · ${esc(s.cospar)}</div></div>
+    <button class="btn icon" id="dClose" title="Close (Esc)">${I.x}</button></div>
+  <div class="tags">
+    <span class="tag" style="--c:${REG[s.regime].c}" data-tip="${REG[s.regime].tip}">${s.regime}</span>
+    <span class="tag" style="--c:${TYP[s.type].c}">${TYP[s.type].name.toUpperCase()}</span>
+    <span class="tag" id="dSun">—</span><span class="tag" id="dVis" style="display:none"></span>
+  </div>
+  <div class="plain">${plainSummary(s)}</div>
+  <div class="actions">
+    <button class="btn ${watched ? 'on' : ''}" id="dWatch" title="Add to / remove from watchlist (W)">${watched ? I.star : I.starO}${watched ? 'Watching' : 'Watch'}</button>
+    <button class="btn ${S.follow ? 'on' : ''}" id="dFollow" title="Camera follows the object (F)">${I.target}Follow</button>
+    <button class="btn" id="dFly" title="Fly camera to object">${I.fly}Fly to</button>
+    <button class="btn" id="dPass" title="Predict passes over your site">${I.pass}Passes</button>
+    <button class="btn" id="dConj" title="Screen for close approaches">${I.conj}Screen</button>
+  </div>
+  <h3>Live state <span class="r mono" id="dTime"></span></h3>
+  <div class="kv">
+    ${kvCell('Latitude', 'dLat', 'Point on Earth directly below the object')}${kvCell('Longitude', 'dLon')}
+    ${kvCell('Altitude', 'dAlt', 'Height above the Earth surface (WGS-84)')}${kvCell('Speed', 'dSpd', 'Orbital velocity (inertial frame)')}
+    ${kvCell('Azimuth', 'dAz', 'Compass direction from your ground site')}${kvCell('Elevation', 'dEl', 'Angle above your horizon. Positive means you could see or contact it.')}
+    ${kvCell('Range', 'dRng', 'Straight-line distance from your ground site')}${kvCell('Coverage radius', 'dFoot', 'Radius of the area on Earth that can see the object above the horizon')}
+  </div>
+  <h3>Orbit</h3>
+  <div class="kv">
+    ${kvCell('Period', '', 'Time for one full lap around Earth', s.period < 600 ? s.period.toFixed(2) + ' min' : (s.period / 60).toFixed(2) + ' h')}
+    ${kvCell('Inclination', '', 'Tilt of the orbit to the equator. 90° is polar, over 90° is retrograde.', s.inc.toFixed(3) + '°')}
+    ${kvCell('Apogee', '', 'Highest altitude of the orbit', fmtN(Math.round(s.apo)) + ' km')}
+    ${kvCell('Perigee', '', 'Lowest altitude of the orbit', fmtN(Math.round(s.peri)) + ' km')}
+    ${kvCell('Eccentricity', '', '0 is a perfect circle. Closer to 1 is more stretched.', s.e.toFixed(6))}
+    ${kvCell('Semi-major axis', '', 'Average distance from the center of the Earth', fmtN(Math.round(s.a)) + ' km')}
+    ${kvCell('RAAN', '', 'Right Ascension of the Ascending Node: where the orbit crosses the equator going north', s.raan.toFixed(2) + '°')}
+    ${kvCell('Arg. of perigee', '', 'Where in the orbit the lowest point sits', s.argp.toFixed(2) + '°')}
+    ${kvCell('Revs / day', '', 'Orbits completed per day', s.revday.toFixed(4))}
+    ${kvCell('B* drag', '', 'Atmospheric drag term from the TLE. Higher means faster decay.', s.bstar.toExponential(2))}
+  </div>
+  <h3>Next passes over ${esc(S.observer.name || 'site')} <span class="r"><a href="#" id="dAllPass" style="color:var(--accent)">All</a></span></h3>
+  <div id="dPasses"></div>
+  <h3>Element set <span class="r"><button class="btn ghost" id="dCopy" style="height:22px;font-size:11px">Copy TLE</button></span></h3>
+  <div class="status" style="margin:0"><span>Epoch ${ymdhm(s.epoch)} UTC</span>·<span style="color:${ageCol}" data-tip="Age of the orbit data. Accuracy degrades by roughly 1–3 km per day for LEO.">${age >= 0 ? age.toFixed(1) + ' days old' : 'future epoch'}</span></div>
+  <pre class="tle">${esc(s.name)}\n${esc(s.l1)}\n${esc(s.l2)}</pre>
+  <div class="status" style="margin:0">Layers: ${esc(groups)} · <a style="color:var(--accent)" target="_blank" rel="noopener" href="https://celestrak.org/satcat/table-satcat.php?CATNR=${encodeURIComponent(s.norad)}">SATCAT record ↗</a></div>`;
+  $('#right').classList.add('on');
+  $('#dClose').onclick = () => select(null);
+  $('#dWatch').onclick = () => toggleWatch(s);
+  $('#dFollow').onclick = () => setFollow(!S.follow);
+  $('#dFly').onclick = () => { setFollow(false); flyTo(s); };
+  $('#dPass').onclick = $('#dAllPass').onclick = e => { e.preventDefault(); showTab('observer'); $('#passSat').value = s.norad; renderPasses(); };
+  $('#dConj').onclick = () => { showTab('conj'); fillConjSelect(); $('#cjPrim').value = s.norad; };
+  $('#dCopy').onclick = () => { navigator.clipboard?.writeText(`${s.name}\n${s.l1}\n${s.l2}`).then(() => toast('Copied', 'TLE copied to clipboard')); };
+}
+function updateDetails() {
+  const s = S.selected; if (!s || !$('#dLat')) return;
+  const d = simDate(), r = stateAt(s, d);
+  $('#dTime').textContent = hms(d) + ' UTC';
+  if (!r) { $('#dSun').textContent = 'NO SOLUTION'; $('#dSun').style.setProperty('--c', '#f87171'); return; }
+  const gd = satellite.eciToGeodetic(r.eci, r.gmst), la = satellite.ecfToLookAngles(obsGd(), r.ecf);
+  const lit = sunlit(r.eci, sunEci(d)), el = la.elevation * DEG;
+  $('#dLat').textContent = latStr(gd.latitude * DEG);
+  $('#dLon').textContent = lonStr(gd.longitude * DEG);
+  $('#dAlt').textContent = fmtN(Math.round(gd.height)) + ' km';
+  $('#dSpd').textContent = Math.hypot(r.vel.x, r.vel.y, r.vel.z).toFixed(3) + ' km/s';
+  $('#dAz').textContent = `${(la.azimuth * DEG).toFixed(1)}° ${compass(la.azimuth * DEG)}`;
+  $('#dEl').textContent = el.toFixed(1) + '°'; $('#dEl').style.color = el > 0 ? 'var(--ok)' : '';
+  $('#dRng').textContent = fmtN(Math.round(la.rangeSat)) + ' km';
+  $('#dFoot').textContent = fmtN(Math.round(RE * Math.acos(RE / (RE + gd.height)))) + ' km';
+  const sun = $('#dSun'); sun.textContent = lit ? '☀ SUNLIT' : '◐ ECLIPSE'; sun.style.setProperty('--c', lit ? '#fde047' : '#94a3b8');
+  const vis = $('#dVis'); vis.style.display = el > 0 ? '' : 'none'; vis.textContent = '▲ ABOVE HORIZON'; vis.style.setProperty('--c', '#34d399');
+  // passes (cached)
+  const t = d.getTime();
+  if (!s._passes || Math.abs(t - s._passes.t) > 15 * 60e3 || (s._passes.list[0] && s._passes.list[0].los && s._passes.list[0].los < t) || s._passes.obs !== obsKey()) {
+    s._passes = { t, obs: obsKey(), list: computePasses(s, d, 48, 0) };
+    renderMiniPasses();
+  } else if (Math.floor(t / 1000) % 5 === 0) renderMiniPasses();
+}
+const obsKey = () => `${S.observer.lat},${S.observer.lon},${S.observer.alt}`;
+function renderMiniPasses() {
+  const s = S.selected, box = $('#dPasses'); if (!s || !box) return;
+  const t = simDate().getTime(), list = s._passes.list.filter(p => !p.los || p.los > t);
+  if (!list.length) { box.innerHTML = `<div class="empty">No passes above the horizon in the next 48 h.</div>`; return; }
+  if (list[0].always) { box.innerHTML = `<div class="empty"><b>Always above the horizon</b>Continuously visible from this site, elevation ${list[0].max.toFixed(1)}°.</div>`; return; }
+  box.innerHTML = `<div class="passes">${list.slice(0, 3).map(p => passRow(p, t)).join('')}</div>`;
+}
+function passRow(p, t, idx) {
+  const now = p.aos <= t;
+  return `<div class="pass" data-i="${idx ?? ''}"><div>${now ? '<span style="color:var(--ok)">● NOW</span>' : hm(new Date(p.aos)) + ' UTC'}<small>${now ? 'ends ' + rel((p.los || t) - t) : rel(p.aos - t)} · ${dur((p.los || p.aos) - p.aos)}</small></div>
+    <div>${p.max.toFixed(0)}°<div class="elbar"><i style="width:${Math.min(100, p.max / 90 * 100)}%"></i></div></div>
+    <div>${compass(p.azA)}→${compass(p.azL)}<small>${p.visible ? '<span style="color:#fde047">★ visible</span>' : p.lit ? 'sunlit' : 'in shadow'}</small></div></div>`;
+}
+
+/* =========================================================================
+   Passes & sky plot
+   ========================================================================= */
+function computePasses(s, start, hours = 24, minEl = 0) {
+  const obs = obsGd(), step = Math.min(60, Math.max(8, s.period * 60 / 400)) * 1000;
+  const look = t => { const r = stateAt(s, new Date(t)); return r ? satellite.ecfToLookAngles(obs, r.ecf) : null; };
+  const elev = t => { const l = look(t); return l ? l.elevation * DEG : -90; };
+  const refine = (a, b, rising) => { for (let k = 0; k < 14; k++) { const m = (a + b) / 2; if ((elev(m) > 0) === rising) b = m; else a = m; } return rising ? b : a; };
+  const t0 = start.getTime(), tEnd = t0 + hours * 3600e3, out = [];
+  let prevT = t0, prev = elev(t0), cur = prev > 0 ? { aos: t0, max: prev, tmax: t0, inProg: true } : null, allUp = prev > 0;
+  for (let t = t0 + step; t <= tEnd; t += step) {
+    const e = elev(t);
+    if (e <= 0) allUp = false;
+    if (e > 0 && prev <= 0) cur = { aos: refine(prevT, t, true), max: e, tmax: t };
+    if (cur && e > cur.max) { cur.max = e; cur.tmax = t; }
+    if (e <= 0 && prev > 0 && cur) { cur.los = refine(prevT, t, false); out.push(cur); cur = null; if (out.length >= 40) break; }
+    prev = e; prevT = t;
+  }
+  if (allUp && cur) return [{ always: true, aos: t0, max: cur.max }];
+  if (cur) { cur.los = null; out.push(cur); }
+  for (const p of out) {
+    // golden refinement of maximum
+    let a = p.tmax - step, b = p.tmax + step;
+    for (let k = 0; k < 18; k++) { const m1 = b - (b - a) * .618, m2 = a + (b - a) * .618; if (elev(m1) > elev(m2)) b = m2; else a = m1; }
+    p.tmax = (a + b) / 2; p.max = Math.max(p.max, elev(p.tmax));
+    const la = look(p.aos), ll = look(p.los || tEnd);
+    p.azA = la ? la.azimuth * DEG : 0; p.azL = ll ? ll.azimuth * DEG : 0;
+    const r = stateAt(s, new Date(p.tmax));
+    p.lit = r ? sunlit(r.eci, sunEci(new Date(p.tmax))) : false;
+    p.visible = p.lit && sunElevation(new Date(p.tmax)) < -6;
+  }
+  return out.filter(p => p.max >= minEl);
+}
+function passTrack(s, p) {
+  const obs = obsGd(), a = p.aos, b = p.los || p.aos + 3600e3, pts = [];
+  for (let k = 0; k <= 80; k++) {
+    const r = stateAt(s, new Date(a + (b - a) * k / 80)); if (!r) continue;
+    const l = satellite.ecfToLookAngles(obs, r.ecf); pts.push({ az: l.azimuth * DEG, el: l.elevation * DEG });
+  }
+  return pts;
+}
+function renderPasses() {
+  const box = $('#passList'), id = $('#passSat').value, s = S.byId.get(id);
+  if (!s) { box.innerHTML = `<div class="empty"><b>No object selected</b>Select an object on the globe or pick one from your watchlist.</div>`; return; }
+  const d = simDate(), t = d.getTime(), min = +$('#passMin').value;
+  const list = computePasses(s, d, 72, min);
+  S.passList = { s, list };
+  if (!list.length) { box.innerHTML = `<div class="empty"><b>No passes found</b>${esc(s.name)} does not rise above ${min}° from this site in the next 72 h.</div>`; return; }
+  if (list[0].always) { box.innerHTML = `<div class="empty"><b>Always above the horizon</b>${esc(s.name)} stays continuously visible from this site.</div>`; return; }
+  box.innerHTML = `<div class="status" style="margin:0 0 6px">${list.length} passes in next 72 h · times in UTC · click a pass to preview it</div>
+  <div class="passes"><div class="pass head"><div>Rise (AOS)</div><div>Max el.</div><div>Path</div></div>
+  ${list.map((p, i) => passRow(p, t, i)).join('')}</div>`;
+  box.querySelectorAll('.pass[data-i]').forEach(el => el.onclick = () => {
+    const p = list[+el.dataset.i]; S.passSel = { s, p, track: passTrack(s, p) };
+    box.querySelectorAll('.pass').forEach(x => x.classList.toggle('sel', x === el));
+    drawSky();
+  });
+}
+const skyCv = $('#sky'), skyCtx = skyCv.getContext('2d');
+function drawSky() {
+  if (!$('#pane-observer').classList.contains('on')) return;
+  const W = skyCv.width, c = W / 2, R = W / 2 - 34, x = skyCtx;
+  x.clearRect(0, 0, W, W);
+  x.fillStyle = 'rgba(2,6,15,.55)'; x.beginPath(); x.arc(c, c, R, 0, 7); x.fill();
+  x.strokeStyle = 'rgba(148,163,184,.22)'; x.lineWidth = 1.5;
+  for (const e of [0, 30, 60]) { x.beginPath(); x.arc(c, c, R * (90 - e) / 90, 0, 7); x.stroke(); }
+  x.beginPath(); x.moveTo(c - R, c); x.lineTo(c + R, c); x.moveTo(c, c - R); x.lineTo(c, c + R); x.stroke();
+  x.fillStyle = '#8a9ab3'; x.font = '600 22px Inter'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  [['N', 0], ['E', 90], ['S', 180], ['W', 270]].forEach(([l, a]) => x.fillText(l, c + (R + 18) * Math.sin(a * RAD), c - (R + 18) * Math.cos(a * RAD)));
+  x.font = '16px JetBrains Mono'; x.fillStyle = '#5d6b82'; x.fillText('30°', c + 6, c - R * 60 / 90 + 12); x.fillText('60°', c + 6, c - R * 30 / 90 + 12);
+  const P = (az, el) => { const r = R * (90 - el) / 90; return [c + r * Math.sin(az * RAD), c - r * Math.cos(az * RAD)]; };
+  if (S.passSel) {
+    x.strokeStyle = '#22d3ee'; x.lineWidth = 3; x.setLineDash([10, 6]); x.beginPath();
+    S.passSel.track.filter(p => p.el >= -1).forEach((p, i) => { const [a, b] = P(p.az, Math.max(0, p.el)); i ? x.lineTo(a, b) : x.moveTo(a, b); }); x.stroke(); x.setLineDash([]);
+  }
+  for (const o of S.sky) {
+    const [a, b] = P(o.az, o.el), w = S.watch.has(o.s.norad), sel = o.s === S.selected;
+    x.fillStyle = hexOf(o.s); x.globalAlpha = w || sel ? 1 : .75;
+    x.beginPath(); x.arc(a, b, sel ? 9 : w ? 7 : 3.2, 0, 7); x.fill();
+    if (sel) { x.strokeStyle = '#fff'; x.lineWidth = 3; x.stroke(); }
+    if (w || sel) { x.globalAlpha = 1; x.fillStyle = '#e6edf7'; x.font = '600 18px Inter'; x.textAlign = 'left'; x.fillText(o.s.name.slice(0, 18), a + 12, b); x.textAlign = 'center'; }
+  }
+  x.globalAlpha = 1;
+  skyCv._hit = S.sky.map(o => { const [a, b] = P(o.az, o.el); return { a, b, s: o.s }; });
+}
+skyCv.addEventListener('click', e => {
+  const r = skyCv.getBoundingClientRect(), k = skyCv.width / r.width, px = (e.clientX - r.left) * k, py = (e.clientY - r.top) * k;
+  let best = null, bd = 400;
+  for (const h of skyCv._hit || []) { const d = (h.a - px) ** 2 + (h.b - py) ** 2; if (d < bd) { bd = d; best = h.s; } }
+  if (best) select(best, { fly: true });
+});
+function renderOverhead() {
+  if (!$('#pane-observer').classList.contains('on')) return;
+  $('#ovN').textContent = `${S.sky.length} objects`;
+  const top = S.sky.slice(0, 12);
+  $('#overhead').innerHTML = top.length ? top.map(o => `<div class="row ${o.s === S.selected ? 'sel' : ''}" data-id="${o.s.norad}"><span class="dot" style="color:${hexOf(o.s)};background:${hexOf(o.s)}"></span>
+    <div class="nm"><b>${esc(o.s.name)}</b><small>${o.s.norad} · ${fmtN(Math.round(o.rng))} km away</small></div>
+    <div class="meta">El ${o.el.toFixed(0)}°<br>${compass(o.az)} ${o.az.toFixed(0)}°</div></div>`).join('')
+    : `<div class="empty">No displayed objects above the horizon right now.</div>`;
+  bindRows($('#overhead'));
+}
+
+/* =========================================================================
+   Watchlist
+   ========================================================================= */
+function saveWatch() {
+  store.set('ssa.watch', [...S.watch.values()].map(w => { const s = S.byId.get(w.norad); return s ? { norad: s.norad, name: s.name, l1: s.l1, l2: s.l2 } : w; }));
+  $('#wCount').textContent = S.watch.size;
+}
+async function addWatch(norad) {
+  norad = String(norad).trim().replace(/^0+(?=\d)/, '');
+  if (!/^[0-9A-Z]{1,5}$/i.test(norad)) { toast('Invalid NORAD ID', 'Use the catalog number, e.g. 25544 for the ISS.', 'var(--warn)'); return; }
+  if (S.watch.has(norad)) { toast('Already watching', S.byId.get(norad)?.name || norad); return; }
+  let s = S.byId.get(norad);
+  S.watch.set(norad, { norad, name: s ? s.name : 'NORAD ' + norad });
+  renderWatch();
+  if (!s) {
+    try { s = await fetchCatnr(norad); }
+    catch (e) { S.watch.delete(norad); renderWatch(); toast('Object not found', `NORAD ${norad}: ${e.message}`, 'var(--bad)'); return; }
+  }
+  S.watch.get(norad).name = s.name;
+  saveWatch(); syncWatchEntities(); applyVisibility(); renderWatch(); runSearch();
+  logEvent('watch', `Added ${s.name} (${norad}) to watchlist`, s);
+  if (S.selected === s) renderDetails();
+}
+function removeWatch(norad) {
+  const s = S.byId.get(norad);
+  S.watch.delete(norad); saveWatch(); syncWatchEntities(); applyVisibility(); renderWatch(); runSearch();
+  if (s && S.selected === s) renderDetails();
+}
+function toggleWatch(s) { S.watch.has(s.norad) ? removeWatch(s.norad) : addWatch(s.norad); }
+function renderWatch() {
+  $('#wCount').textContent = S.watch.size;
+  const box = $('#wList');
+  if (!S.watch.size) { box.innerHTML = `<div class="empty"><b>Your watchlist is empty</b>Click the ★ next to any object, or add a NORAD ID above.</div>`; return; }
+  box.innerHTML = [...S.watch.values()].map(w => {
+    const s = S.byId.get(w.norad);
+    if (!s) return `<div class="wcard" style="--c:#475569"><div class="wtop"><b>${esc(w.name)}</b><span class="chip"><span class="spin"></span>loading</span></div></div>`;
+    return `<div class="wcard ${S.selected === s ? 'sel' : ''}" style="--c:${hexOf(s)}" data-id="${s.norad}">
+      <div class="wtop"><b>${esc(s.name)}</b><span class="tag" style="--c:${REG[s.regime].c}">${s.regime}</span><span class="tag" id="w${s.norad}sun">—</span>
+        <div class="mini"><button data-a="fly" title="Fly to">${I.fly}</button><button data-a="rm" title="Remove">${I.trash}</button></div></div>
+      <div class="status" style="margin:2px 0 0;font-family:var(--mono)">NORAD ${s.norad} · ${esc(s.cospar)}</div>
+      <div class="wgrid"><div><small>Altitude</small><span id="w${s.norad}alt">—</span></div><div><small>Speed</small><span id="w${s.norad}spd">—</span></div>
+        <div><small>Lat</small><span id="w${s.norad}lat">—</span></div><div><small>Lon</small><span id="w${s.norad}lon">—</span></div></div>
+      <div class="wnext" id="w${s.norad}next">Computing next pass…</div></div>`;
+  }).join('');
+  box.querySelectorAll('.wcard[data-id]').forEach(el => {
+    el.onclick = e => {
+      const s = S.byId.get(el.dataset.id), a = e.target.closest('button')?.dataset.a;
+      if (a === 'rm') { e.stopPropagation(); removeWatch(el.dataset.id); return; }
+      select(s, { fly: true, force: a === 'fly' });
+    };
+  });
+  S.watchPassT = 0; updateWatchLive();
+}
+function updateWatchLive() {
+  if (!$('#pane-watch').classList.contains('on') || !S.watch.size) return;
+  const d = simDate(), t = d.getTime(), sun = sunEci(d);
+  const doPass = !S.watchPassT || performance.now() - S.watchPassT > 30e3 || Math.abs(t - (S.watchPassSim || 0)) > 20 * 60e3;
+  if (doPass) { S.watchPassT = performance.now(); S.watchPassSim = t; }
+  for (const id of S.watch.keys()) {
+    const s = S.byId.get(id), el = document.getElementById(`w${id}alt`); if (!s || !el) continue;
+    const r = stateAt(s, d); if (!r) { el.textContent = 'decayed?'; continue; }
+    const gd = satellite.eciToGeodetic(r.eci, r.gmst), lit = sunlit(r.eci, sun);
+    el.textContent = fmtN(Math.round(gd.height)) + ' km';
+    document.getElementById(`w${id}spd`).textContent = Math.hypot(r.vel.x, r.vel.y, r.vel.z).toFixed(2) + ' km/s';
+    document.getElementById(`w${id}lat`).textContent = latStr(gd.latitude * DEG);
+    document.getElementById(`w${id}lon`).textContent = lonStr(gd.longitude * DEG);
+    const sn = document.getElementById(`w${id}sun`); sn.textContent = lit ? '☀' : '◐'; sn.title = lit ? 'Sunlit' : 'In eclipse'; sn.style.setProperty('--c', lit ? '#fde047' : '#94a3b8');
+    if (doPass || !s._wp) s._wp = computePasses(s, d, 48, 10)[0] || null;
+    const p = s._wp, nx = document.getElementById(`w${id}next`);
+    if (!p) nx.innerHTML = `No pass above 10° in 48 h`;
+    else if (p.always) nx.innerHTML = `<b style="color:var(--ok)">Always above horizon</b>`;
+    else if (p.aos <= t && (!p.los || p.los > t)) nx.innerHTML = `<b style="color:var(--ok)">● Passing overhead now</b> · max ${p.max.toFixed(0)}° · ends ${rel((p.los || t) - t)}`;
+    else if (p.los && p.los < t) { s._wp = null; }
+    else nx.innerHTML = `Next pass <b>${rel(p.aos - t)}</b> · ${hm(new Date(p.aos))} UTC · max ${p.max.toFixed(0)}°${p.visible ? ' · <span style="color:#fde047">★ visible</span>' : ''}`;
+  }
+}
+
+/* =========================================================================
+   Conjunction screening
+   ========================================================================= */
+let cjToken = null;
+const cjEnts = [];
+function fillConjSelect() {
+  const sel = $('#cjPrim'), cur = sel.value, opts = [];
+  if (S.selected) opts.push([S.selected.norad, `${S.selected.name} (selected)`]);
+  for (const id of S.watch.keys()) { const s = S.byId.get(id); if (s && s !== S.selected) opts.push([id, s.name]); }
+  sel.innerHTML = opts.length ? opts.map(([v, l]) => `<option value="${v}">${esc(l)} · ${v}</option>`).join('') : '<option value="">Select an object or add to watchlist</option>';
+  if (opts.some(o => o[0] === cur)) sel.value = cur;
+}
+async function runConj() {
+  const prim = S.byId.get($('#cjPrim').value);
+  if (!prim) { toast('No primary object', 'Select an object on the globe or from your watchlist first.', 'var(--warn)'); return; }
+  const hours = +$('#cjWin').value, thr = +$('#cjThr').value, step = 60;
+  const token = { cancel: false }; cjToken = token;
+  $('#cjRun').disabled = true; $('#cjStop').disabled = false; $('#cjProg').style.display = ''; $('#cjRes').innerHTML = '';
+  const t0 = simDate().getTime(), N = Math.ceil(hours * 3600 / step) + 1, P = new Float64Array(N * 3);
+  for (let i = 0; i < N; i++) {
+    const pv = satellite.sgp4(prim.rec, tsince(prim.rec, t0 + i * step * 1000)), p = pv && pv.position;
+    if (!p || isNaN(p.x)) { P[3 * i] = NaN; continue; }
+    P[3 * i] = p.x; P[3 * i + 1] = p.y; P[3 * i + 2] = p.z;
+  }
+  const margin = thr + 60, gate = thr + 8.5 * step;
+  const cands = S.sats.filter(s => s !== prim && s.peri - margin <= prim.apo && s.apo + margin >= prim.peri);
+  const res = [], started = performance.now();
+  const dist = (s, t) => {
+    const a = satellite.sgp4(prim.rec, tsince(prim.rec, t)), b = satellite.sgp4(s.rec, tsince(s.rec, t));
+    if (!a || !b || !a.position || !b.position) return { d: Infinity };
+    const pa = a.position, pb = b.position;
+    return { d: Math.hypot(pa.x - pb.x, pa.y - pb.y, pa.z - pb.z), va: a.velocity, vb: b.velocity };
+  };
+  const refine = (s, i) => {
+    let a = t0 + (i - 1) * step * 1000, b = t0 + (i + 1) * step * 1000;
+    for (let k = 0; k < 26; k++) { const m1 = b - (b - a) * .618, m2 = a + (b - a) * .618; if (dist(s, m1).d < dist(s, m2).d) b = m2; else a = m1; }
+    const tca = (a + b) / 2, r = dist(s, tca);
+    if (!(r.d < thr) || tca < t0) return;
+    const v = Math.hypot(r.va.x - r.vb.x, r.va.y - r.vb.y, r.va.z - r.vb.z);
+    if (v < 0.02) { coloc.add(s); return; }   // docked modules / formation sharing the same element set
+    res.push({ s, tca, d: r.d, v });
+  };
+  const coloc = new Set();
+  const CH = 150;
+  for (let c = 0; c < cands.length; c += CH) {
+    if (token.cancel) break;
+    for (const s of cands.slice(c, c + CH)) {
+      let d2 = Infinity, d1 = Infinity;
+      for (let i = 0; i < N; i++) {
+        const pv = satellite.sgp4(s.rec, tsince(s.rec, t0 + i * step * 1000)), p = pv && pv.position;
+        if (!p || isNaN(p.x)) break;
+        const d = Math.hypot(p.x - P[3 * i], p.y - P[3 * i + 1], p.z - P[3 * i + 2]);
+        if (i >= 1 && d1 < d2 && d1 <= d && d1 < gate) refine(s, i - 1);
+        d2 = d1; d1 = d;
+      }
+    }
+    const done = Math.min(cands.length, c + CH);
+    $('#cjProg i').style.width = (done / cands.length * 100).toFixed(1) + '%';
+    $('#cjStatus').textContent = `Screening ${fmtN(done)} / ${fmtN(cands.length)} candidates in the same altitude band…`;
+    await new Promise(r => setTimeout(r, 0));
+  }
+  res.sort((a, b) => a.d - b.d);
+  $('#cjRun').disabled = false; $('#cjStop').disabled = true; $('#cjProg').style.display = 'none';
+  const secs = ((performance.now() - started) / 1000).toFixed(1);
+  $('#cjStatus').innerHTML = `${token.cancel ? 'Cancelled. ' : ''}<b style="color:var(--text)">${res.length}</b> approaches under ${thr} km for <b style="color:var(--text)">${esc(prim.name)}</b> · ${fmtN(cands.length)} of ${fmtN(S.sats.length)} objects screened · ${secs}s${coloc.size ? ` · ${coloc.size} co-located object(s) excluded (docked or same element set: ${[...coloc].slice(0, 3).map(s => esc(s.name)).join(', ')}${coloc.size > 3 ? '…' : ''})` : ''}`;
+  S.cjResults = { prim, res };
+  renderConj(t0);
+  if (!token.cancel) logEvent('conj', `Screening ${prim.name}: ${res.length} approach${res.length === 1 ? '' : 'es'} < ${thr} km in next ${hours} h${res[0] ? ` (closest ${res[0].d.toFixed(2)} km with ${res[0].s.name})` : ''}`, prim, res.length ? 'var(--warn)' : null);
+}
+function renderConj(t0) {
+  const { prim, res } = S.cjResults || {}, box = $('#cjRes');
+  if (!res) { box.innerHTML = ''; return; }
+  if (!res.length) { box.innerHTML = `<div class="empty"><b>No close approaches found</b>Nothing comes within the chosen distance in this window.</div>`; return; }
+  box.innerHTML = `<table class="ct"><thead><tr><th>Secondary</th><th>TCA (UTC)</th><th>Miss</th><th>Rel. vel</th></tr></thead><tbody>
+  ${res.slice(0, 200).map((r, i) => `<tr class="r" data-i="${i}"><td><b style="font-family:var(--sans);font-weight:500">${esc(r.s.name)}</b><small>${r.s.norad} · ${TYP[r.s.type].name}</small></td>
+    <td>${ymdhm(new Date(r.tca)).slice(5)}<small>${rel(r.tca - t0)}</small></td>
+    <td class="${r.d < 1 ? 'risk-h' : r.d < 5 ? 'risk-m' : 'risk-l'}">${r.d.toFixed(2)} km</td><td>${r.v.toFixed(2)}<small>km/s</small></td></tr>`).join('')}</tbody></table>`;
+  box.querySelectorAll('tr.r').forEach(tr => tr.onclick = () => showConj(prim, res[+tr.dataset.i]));
+}
+function clearConjEnts() { cjEnts.forEach(e => viewer.entities.remove(e)); cjEnts.length = 0; }
+function showConj(prim, r) {
+  clearConjEnts();
+  clock.shouldAnimate = false; clock.currentTime = Cesium.JulianDate.fromDate(new Date(r.tca)); forceProp = true;
+  select(prim, { force: true });
+  const sec = r.s;
+  cjEnts.push(viewer.entities.add({
+    position: new Cesium.CallbackProperty((t, x) => cartAt(sec, t, x), false),
+    point: { pixelSize: 11, color: C('#f87171'), outlineColor: Cesium.Color.WHITE, outlineWidth: 2 },
+    label: { text: `${sec.name}\nmiss ${r.d.toFixed(2)} km`, font: '600 12px Inter, sans-serif', fillColor: C('#fecaca'), showBackground: true, backgroundColor: C('#450a0a', .8), pixelOffset: new Cesium.Cartesian2(14, 18), horizontalOrigin: Cesium.HorizontalOrigin.LEFT }
+  }));
+  cjEnts.push(viewer.entities.add({
+    polyline: { positions: new Cesium.CallbackProperty(t => { const a = cartAt(prim, t), b = cartAt(sec, t); return a && b ? [a, b] : []; }, false), width: 2, material: new Cesium.PolylineDashMaterialProperty({ color: C('#f87171'), dashLength: 8 }), arcType: Cesium.ArcType.NONE }
+  }));
+  const st = stateAt(prim, new Date(r.tca));
+  if (st) {
+    const c = new Cesium.Cartesian3(st.ecf.x * 1000, st.ecf.y * 1000, st.ecf.z * 1000);
+    viewer.camera.flyToBoundingSphere(new Cesium.BoundingSphere(c, Math.max(20e3, r.d * 1000 * 3)), { duration: 1.8, offset: new Cesium.HeadingPitchRange(0, -0.5, Math.max(150e3, r.d * 1000 * 12)) });
+  }
+  toast('Conjunction preview', `Clock paused at TCA. Press L to return live.`, 'var(--warn)');
+}
+
+/* =========================================================================
+   Events & toasts
+   ========================================================================= */
+const EVI = { aos: ['▲', '#34d399'], los: ['▼', '#94a3b8'], ecl: ['◐', '#94a3b8'], sun: ['☀', '#fde047'], conj: ['✕', '#fbbf24'], watch: ['★', '#fbbf24'], data: ['⟳', '#22d3ee'], err: ['!', '#f87171'], info: ['i', '#22d3ee'] };
+function logEvent(kind, text, s, toastCol) {
+  const t = simDate();
+  S.events.unshift({ kind, text, t, norad: s?.norad });
+  if (S.events.length > 300) S.events.pop();
+  $('#eCount').textContent = S.events.length;
+  renderEvents();
+  if (toastCol && S.toasts) toast(text.split(':')[0], text.includes(':') ? text.split(':').slice(1).join(':') : '', toastCol);
+}
+function renderEvents() {
+  if (!$('#pane-events').classList.contains('on')) return;
+  $('#evList').innerHTML = S.events.length ? S.events.map(e => { const [ic, c] = EVI[e.kind] || EVI.info; return `<div class="ev" ${e.norad ? `data-id="${e.norad}" style="cursor:pointer"` : ''}><time>${hms(e.t)}<br><span style="color:var(--dim)">${e.t.toISOString().slice(5, 10)}</span></time><span class="ic" style="--c:${c}">${ic}</span><div>${esc(e.text)}</div></div>`; }).join('')
+    : `<div class="empty">No events yet.</div>`;
+  $('#evList').querySelectorAll('.ev[data-id]').forEach(el => el.onclick = () => { const s = S.byId.get(el.dataset.id); if (s) select(s, { fly: true }); });
+}
+function toast(title, msg = '', col = 'var(--accent)') {
+  const el = document.createElement('div');
+  el.className = 'toast'; el.style.setProperty('--c', col);
+  el.innerHTML = `<b>${esc(title)}</b>${esc(msg)}`;
+  $('#toasts').appendChild(el);
+  while ($('#toasts').children.length > 4) $('#toasts').firstChild.remove();
+  setTimeout(() => { el.style.transition = 'opacity .4s'; el.style.opacity = 0; setTimeout(() => el.remove(), 400); }, 5500);
+}
+let evLast = 0;
+function checkEvents() {
+  const d = simDate(), t = d.getTime(), sun = sunEci(d), obs = obsGd();
+  const jump = !evLast || Math.abs(t - evLast) > 10 * 60e3 || t < evLast;
+  const live = isLive();
+  for (const id of S.watch.keys()) {
+    const s = S.byId.get(id); if (!s) continue;
+    const r = stateAt(s, d); if (!r) continue;
+    const up = satellite.ecfToLookAngles(obs, r.ecf).elevation > 0, lit = sunlit(r.eci, sun);
+    if (!jump && s._ev) {
+      if (up !== s._ev.up) logEvent(up ? 'aos' : 'los', `${s.name}: ${up ? 'rose above' : 'set below'} the horizon at ${S.observer.name || 'your site'}`, s, up && live ? 'var(--ok)' : null);
+      if (lit !== s._ev.lit) logEvent(lit ? 'sun' : 'ecl', `${s.name}: ${lit ? 'left Earth’s shadow (sunlit)' : 'entered Earth’s shadow (eclipse)'}`, s);
+    }
+    s._ev = { up, lit };
+  }
+  evLast = t;
+}
+
+/* =========================================================================
+   Clock & live UI
+   ========================================================================= */
+const isLive = () => clock.shouldAnimate && clock.multiplier === 1 && Math.abs(Cesium.JulianDate.secondsDifference(clock.currentTime, Cesium.JulianDate.now())) < 5;
+function updateClock() {
+  const d = simDate();
+  $('#clkT').textContent = hms(d);
+  $('#clkD').textContent = longDate(d) + ' · UTC';
+  const b = $('#liveBadge'), off = d.getTime() - Date.now();
+  if (isLive()) { b.className = 'badge live'; b.innerHTML = '<i></i><span>LIVE</span>'; }
+  else if (!clock.shouldAnimate) { b.className = 'badge paused'; b.innerHTML = `<i></i><span>PAUSED · T${off >= 0 ? '+' : '−'}${dur(off)}</span>`; }
+  else { b.className = 'badge sim'; b.innerHTML = `<i></i><span>SIM ${clock.multiplier}× · T${off >= 0 ? '+' : '−'}${dur(off)}</span>`; }
+  $('#tPlay').innerHTML = clock.shouldAnimate ? I.pause : I.play;
+}
+function liveUi() {
+  $('#stOver').textContent = fmtN(S.sky.length);
+  updateDetails(); updateWatchLive(); drawSky(); renderOverhead(); checkEvents();
+}
+function goLive() { clock.currentTime = Cesium.JulianDate.now(); clock.multiplier = 1; clock.shouldAnimate = true; $('#tSpeed').value = '1'; forceProp = true; evLast = 0; clearConjEnts(); }
+
+/* =========================================================================
+   Catalog UI: layers, legend, search
+   ========================================================================= */
+function renderLayers() {
+  $('#layers').innerHTML = GROUPS.map(g => {
+    const items = g.items.filter(([id]) => id !== 'custom' || S.meta.custom);
+    if (!items.length) return '';
+    return `<div class="lgroup"><div class="lt">${g.sec}</div><div class="chips">${items.map(([id, label]) => {
+      const on = S.layers.has(id), m = S.meta[id];
+      return `<button class="chip ${on ? 'on' : ''}" data-g="${id}">${S.loading.has(id) ? '<span class="spin"></span>' : ''}${esc(label)}${m ? `<span class="c">${fmtN(m.n)}</span>` : ''}</button>`;
+    }).join('')}</div></div>`;
+  }).join('');
+  $$('#layers .chip').forEach(b => b.onclick = async () => {
+    const g = b.dataset.g;
+    if (S.layers.has(g)) S.layers.delete(g); else S.layers.add(g);
+    store.set('ssa.layers', [...S.layers].filter(x => x !== 'custom'));
+    renderLayers(); applyVisibility();
+    if (S.layers.has(g) && !S.loaded.has(g)) { try { await loadLayer(g); logEvent('data', `Loaded layer “${GLABEL[g]}” (${fmtN(S.meta[g]?.n || 0)} objects)`); } catch {} }
+  });
+}
+function renderLegend() {
+  const cnt = S.counts || {};
+  if (S.colorBy === 'regime') {
+    $('#legend').innerHTML = `<span class="lgl">Orbit</span>` + Object.entries(REG).map(([k, r]) =>
+      `<button class="lg ${S.regimes.has(k) ? '' : 'off'}" data-r="${k}" title="${r.tip}. Click to show or hide."><span class="dot" style="color:${r.c};background:${r.c}"></span>${k}<span class="c">${fmtN(cnt[k] || 0)}</span></button>`).join('');
+    $$('#legend .lg').forEach(b => b.onclick = () => { const k = b.dataset.r; S.regimes.has(k) ? S.regimes.delete(k) : S.regimes.add(k); applyVisibility(); });
+  } else {
+    const tc = S.tcounts || {};
+    $('#legend').innerHTML = `<span class="lgl">Type</span>` + Object.entries(TYP).map(([k, r]) =>
+      `<button class="lg ${S.types.has(k) ? '' : 'off'}" data-t="${k}"><span class="dot" style="color:${r.c};background:${r.c}"></span>${r.name}<span class="c">${fmtN(tc[k] || 0)}</span></button>`).join('');
+    $$('#legend .lg').forEach(b => b.onclick = () => { const k = b.dataset.t; S.types.has(k) ? S.types.delete(k) : S.types.add(k); applyVisibility(); });
+  }
+  $$('[data-cb]').forEach(b => b.classList.toggle('on', b.dataset.cb === S.colorBy));
+}
+function renderTypeChips() {
+  const tc = S.tcounts || {};
+  $('#typeChips').innerHTML = Object.entries(TYP).map(([k, t]) => `<button class="chip ${S.types.has(k) ? 'on' : ''}" data-t="${k}"><span class="dot" style="color:${t.c};background:${t.c};width:7px;height:7px"></span>${t.name}<span class="c">${fmtN(tc[k] || 0)}</span></button>`).join('');
+  $$('#typeChips .chip').forEach(b => b.onclick = () => { const k = b.dataset.t; S.types.has(k) ? S.types.delete(k) : S.types.add(k); applyVisibility(); });
+}
+function satRow(s) {
+  const w = S.watch.has(s.norad);
+  return `<div class="row ${S.selected === s ? 'sel' : ''}" data-id="${s.norad}"><span class="dot" style="color:${hexOf(s)};background:${hexOf(s)}"></span>
+    <div class="nm"><b>${esc(s.name)}</b><small>${s.norad} · ${esc(s.cospar)}</small></div>
+    <div class="meta">${s.regime} · ${fmtN(Math.round((s.apo + s.peri) / 2))} km<br>${s.inc.toFixed(1)}° · ${s.period < 600 ? s.period.toFixed(0) + ' min' : (s.period / 60).toFixed(1) + ' h'}</div>
+    <button class="star ${w ? 'on' : ''}" data-star="${s.norad}" title="${w ? 'Remove from' : 'Add to'} watchlist">${w ? I.star : I.starO}</button></div>`;
+}
+function bindRows(box) {
+  box.querySelectorAll('.row[data-id]').forEach(el => el.onclick = e => {
+    const star = e.target.closest('[data-star]');
+    const s = S.byId.get(el.dataset.id); if (!s) return;
+    if (star) { e.stopPropagation(); toggleWatch(s); return; }
+    select(s, { fly: true });
+  });
+}
+function runSearch() {
+  const q = $('#q').value.trim().toUpperCase(), box = $('#results');
+  let list = [];
+  if (!q) {
+    list = FEATURED.map(id => S.byId.get(id)).filter(Boolean);
+    $('#qInfo').innerHTML = list.length ? 'Featured objects · type to search the whole catalog' : '';
+  } else {
+    const qn = q.replace(/^0+(?=\d)/, '');
+    for (const s of S.sats) {
+      const n = s.name.toUpperCase();
+      let score = s.norad === qn ? 0 : n.startsWith(q) ? 1 : n.includes(q) ? 2 : s.cospar.toUpperCase().includes(q) || s.l1.substring(9, 17).trim().startsWith(q) ? 3 : -1;
+      if (score >= 0) list.push([score, s]);
+    }
+    list.sort((a, b) => a[0] - b[0] || a[1].name.localeCompare(b[1].name));
+    const total = list.length; list = list.slice(0, 120).map(x => x[1]);
+    $('#qInfo').innerHTML = total ? `${fmtN(total)} match${total === 1 ? '' : 'es'}${total > 120 ? ' · showing first 120' : ''}` :
+      (/^\d{1,5}$/.test(qn) ? `Not in loaded layers. <a href="#" id="qFetch" style="color:var(--accent)">Fetch NORAD ${qn} from CelesTrak and watch it</a>` : 'No matches in loaded layers');
+    const f = $('#qFetch'); if (f) f.onclick = e => { e.preventDefault(); addWatch(qn); };
+  }
+  box.innerHTML = list.map(satRow).join('');
+  bindRows(box);
+}
+function highlightLists() {
+  $$('.row[data-id]').forEach(r => r.classList.toggle('sel', S.selected?.norad === r.dataset.id));
+  $$('.wcard[data-id]').forEach(r => r.classList.toggle('sel', S.selected?.norad === r.dataset.id));
+}
+function updateDataStatus() {
+  const ts = Object.values(S.meta).map(m => m.t).filter(Boolean);
+  if (!ts.length) { $('#dataStatus').innerHTML = ''; return; }
+  const t = Math.min(...ts);
+  $('#dataStatus').innerHTML = `<span class="ok">●</span> CelesTrak GP data · fetched ${rel(t - Date.now())} · <a href="#" id="refresh" style="color:var(--accent)">Refresh</a>`;
+  $('#refresh').onclick = async e => {
+    e.preventDefault();
+    const stale = [...S.loaded].filter(g => g !== 'custom' && Date.now() - (S.meta[g]?.t || 0) > 2 * 3600e3);
+    if (!stale.length) { toast('Data is current', 'CelesTrak updates element sets about every 2 hours, and yours are newer than that.'); return; }
+    for (const g of stale) { S.loaded.delete(g); try { await loadLayer(g, true); } catch {} }
+    logEvent('data', `Refreshed ${stale.length} layer(s) from CelesTrak`);
+  };
+}
+
+/* =========================================================================
+   Observer UI
+   ========================================================================= */
+function renderObserver() {
+  $('#obsName').value = S.observer.name; $('#obsLat').value = S.observer.lat; $('#obsLon').value = S.observer.lon; $('#obsAlt').value = S.observer.alt;
+}
+function setObserver(o, silent) {
+  Object.assign(S.observer, o);
+  S.observer.lat = Math.max(-90, Math.min(90, +S.observer.lat || 0));
+  S.observer.lon = ((+S.observer.lon || 0) + 540) % 360 - 180;
+  store.set('ssa.observer', S.observer); renderObserver();
+  for (const s of S.sats) { s._wp = null; s._ev = null; }
+  S.watchPassT = 0; S.passSel = null; forceProp = true;
+  if (S.selected) { S.selected._passes = null; renderDetails(); }
+  if ($('#pane-observer').classList.contains('on')) renderPasses();
+  if (!silent) logEvent('info', `Ground site set to ${S.observer.name} (${S.observer.lat.toFixed(3)}, ${S.observer.lon.toFixed(3)})`);
+}
+['obsName', 'obsLat', 'obsLon', 'obsAlt'].forEach(id => $('#' + id).addEventListener('change', () => setObserver({ name: $('#obsName').value.trim() || 'Observer', lat: +$('#obsLat').value, lon: +$('#obsLon').value, alt: +$('#obsAlt').value || 0 })));
+$('#obsGeo').onclick = () => {
+  if (!navigator.geolocation) return toast('Geolocation unavailable', 'Enter coordinates manually.', 'var(--warn)');
+  navigator.geolocation.getCurrentPosition(p => setObserver({ name: 'My location', lat: +p.coords.latitude.toFixed(5), lon: +p.coords.longitude.toFixed(5), alt: Math.round(p.coords.altitude || 0) }),
+    e => toast('Location denied', e.message, 'var(--warn)'), { timeout: 10000 });
+};
+$('#obsPick').onclick = () => { S.pickObserver = !S.pickObserver; $('#obsPick').classList.toggle('on', S.pickObserver); if (S.pickObserver) toast('Pick a site', 'Click anywhere on the globe to place your ground site.'); };
+
+/* =========================================================================
+   Globe interaction
+   ========================================================================= */
+const handler = new Cesium.ScreenSpaceEventHandler(scene.canvas);
+const satFromPick = p => !p ? null : typeof p.id === 'number' ? S.sats[p.id] : p.id && p.id.satRef ? p.id.satRef : p.id === selEnt ? S.selected : null;
+handler.setInputAction(e => {
+  if (S.pickObserver) {
+    const c = viewer.camera.pickEllipsoid(e.position, scene.globe.ellipsoid);
+    if (c) { const g = Cesium.Cartographic.fromCartesian(c); setObserver({ name: 'Custom site', lat: +(g.latitude * DEG).toFixed(4), lon: +(g.longitude * DEG).toFixed(4), alt: 0 }); }
+    S.pickObserver = false; $('#obsPick').classList.remove('on'); return;
+  }
+  const s = satFromPick(scene.pick(e.position));
+  if (s) select(s);
+}, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+let hovPos = null, hovBusy = false;
+const tip = $('#tip');
+handler.setInputAction(m => {
+  hovPos = m.endPosition;
+  if (hovBusy) return; hovBusy = true;
+  setTimeout(() => {
+    hovBusy = false;
+    const s = hovPos && satFromPick(scene.pick(hovPos));
+    scene.canvas.style.cursor = s || S.pickObserver ? (S.pickObserver ? 'crosshair' : 'pointer') : '';
+    if (!s) { tip.style.display = 'none'; return; }
+    const r = stateAt(s, simDate()), alt = r ? satellite.eciToGeodetic(r.eci, r.gmst).height : NaN;
+    const rect = scene.canvas.getBoundingClientRect();
+    tip.innerHTML = `<b>${esc(s.name)}</b><small>${s.norad} · ${s.regime} · ${TYP[s.type].name} · ${isNaN(alt) ? '—' : fmtN(Math.round(alt)) + ' km'}</small>`;
+    tip.style.display = 'block';
+    tip.style.transform = `translate(${rect.left + hovPos.x + 14}px, ${rect.top + hovPos.y + 14}px)`;
+  }, 40);
+}, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+scene.canvas.addEventListener('mouseleave', () => { hovPos = null; tip.style.display = 'none'; });
+
+/* =========================================================================
+   Controls wiring
+   ========================================================================= */
+function showTab(t) {
+  $$('.tab').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+  $$('.pane').forEach(p => p.classList.toggle('on', p.id === 'pane-' + t));
+  $('#left').classList.remove('collapsed');
+  if (t === 'observer') { fillPassSelect(); renderPasses(); drawSky(); renderOverhead(); }
+  if (t === 'watch') { S.watchPassT = 0; renderWatch(); }
+  if (t === 'conj') fillConjSelect();
+  if (t === 'events') renderEvents();
+}
+function fillPassSelect() {
+  const sel = $('#passSat'), cur = sel.value || S.selected?.norad, opts = [];
+  if (S.selected) opts.push([S.selected.norad, S.selected.name + ' (selected)']);
+  for (const id of S.watch.keys()) { const s = S.byId.get(id); if (s && s !== S.selected) opts.push([id, s.name]); }
+  sel.innerHTML = opts.length ? opts.map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('') : '<option value="">No object selected</option>';
+  if (opts.some(o => o[0] === cur)) sel.value = cur;
+}
+$$('.tab').forEach(b => b.onclick = () => showTab(b.dataset.tab));
+$('#passSat').onchange = () => { S.passSel = null; renderPasses(); drawSky(); };
+$('#passMin').onchange = renderPasses;
+$('#q').addEventListener('input', () => { clearTimeout(runSearch._t); runSearch._t = setTimeout(runSearch, 120); });
+$('#q').addEventListener('keydown', e => { if (e.key === 'Enter') { const r = $('#results .row'); if (r) r.click(); } });
+$$('[data-cb]').forEach(b => b.onclick = () => { S.colorBy = b.dataset.cb; store.set('ssa.colorBy', S.colorBy); recolor(); renderWatch(); if (S.selected) renderDetails(); });
+$('#tleAdd').onclick = () => {
+  const recs = parseTLE($('#tleIn').value);
+  if (!recs.length) return toast('No valid TLEs found', 'Each object needs a line starting with “1 ” and one starting with “2 ”.', 'var(--warn)');
+  let n = 0; for (const [nm, a, b] of recs) if (upsert(nm, a, b, 'custom')) n++;
+  S.meta.custom = { n: (S.meta.custom?.n || 0) + n, t: Date.now() }; S.layers.add('custom'); S.loaded.add('custom');
+  renderLayers(); applyVisibility(); runSearch(); $('#tleIn').value = '';
+  toast('Imported', `${n} object(s) added to “Custom import”.`, 'var(--ok)'); logEvent('data', `Imported ${n} custom element set(s)`);
+};
+$('#wAddBtn').onclick = () => { addWatch($('#wAdd').value); $('#wAdd').value = ''; };
+$('#wAdd').addEventListener('keydown', e => { if (e.key === 'Enter') $('#wAddBtn').click(); });
+$('#wTraces').classList.toggle('on', S.watchTraces);
+$('#wTraces').onclick = () => { S.watchTraces = !S.watchTraces; store.set('ssa.watchTraces', S.watchTraces); $('#wTraces').classList.toggle('on', S.watchTraces); forceProp = true; };
+$('#wExport').onclick = () => {
+  saveWatch();
+  const blob = new Blob([JSON.stringify(store.get('ssa.watch', []), null, 2)], { type: 'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'ssa-watchlist.json'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
+$('#wImport').onclick = () => $('#wFile').click();
+$('#wFile').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try {
+    const arr = JSON.parse(await f.text()); let n = 0;
+    for (const w of arr) { if (!w.norad) continue; if (w.l1 && w.l2) upsert(w.name, w.l1, w.l2, '_watch'); if (!S.watch.has(String(w.norad))) { await addWatch(String(w.norad)); n++; } }
+    toast('Watchlist imported', `${n} new object(s)`, 'var(--ok)');
+  } catch (err) { toast('Import failed', err.message, 'var(--bad)'); }
+  e.target.value = '';
+};
+$('#cjRun').onclick = runConj;
+$('#cjStop').onclick = () => { if (cjToken) cjToken.cancel = true; };
+$('#cjClear').onclick = () => { S.cjResults = null; renderConj(); clearConjEnts(); $('#cjStatus').textContent = ''; };
+$('#evToasts').classList.toggle('on', S.toasts);
+$('#evToasts').onclick = () => { S.toasts = !S.toasts; store.set('ssa.toasts', S.toasts); $('#evToasts').classList.toggle('on', S.toasts); };
+$('#evClear').onclick = () => { S.events = []; $('#eCount').textContent = 0; renderEvents(); };
+
+$('#liveBadge').onclick = goLive;
+$('#tPlay').onclick = () => { clock.shouldAnimate = !clock.shouldAnimate; updateClock(); };
+$('#tSpeed').onchange = e => { clock.multiplier = +e.target.value; clock.shouldAnimate = true; forceProp = true; };
+const jump = s => { clock.currentTime = Cesium.JulianDate.addSeconds(clock.currentTime, s, new Cesium.JulianDate()); forceProp = true; };
+$('#tBack').onclick = () => jump(-3600);
+$('#tFwd').onclick = () => jump(3600);
+$$('#viewSeg [data-v]').forEach(b => b.onclick = () => {
+  $$('#viewSeg [data-v]').forEach(x => x.classList.toggle('on', x === b));
+  const v = b.dataset.v; setFollow(false);
+  if (v === '3d') scene.morphTo3D(1.2); else if (v === '2d') scene.morphTo2D(1.2); else scene.morphToColumbusView(1.2);
+});
+$('#homeBtn').onclick = () => { setFollow(false); viewer.camera.flyTo({ destination: scene.mode === Cesium.SceneMode.SCENE3D ? HOME() : Cesium.Cartesian3.fromDegrees(S.observer.lon, 0, 3.2e7), duration: 1.4 }); };
+$('#mapSel').innerHTML = Object.entries(MAPS).map(([k, m]) => `<option value="${k}">🗺 ${m.name}</option>`).join('');
+$('#mapSel').onchange = e => setMap(e.target.value);
+$('#tgLight').onclick = () => { scene.globe.enableLighting = !scene.globe.enableLighting; $('#tgLight').classList.toggle('on', scene.globe.enableLighting); };
+const toggleOrbits = () => { S.showOrbits = !S.showOrbits; $('#tgOrbits').classList.toggle('on', S.showOrbits); forceProp = true; };
+$('#tgOrbits').onclick = toggleOrbits;
+$('#helpBtn').onclick = () => $('#help').classList.add('on');
+$('#help').addEventListener('click', e => { if (e.target.id === 'help' || e.target.closest('[data-close]')) $('#help').classList.remove('on'); });
+$('#panelBtn').onclick = () => $('#left').classList.toggle('collapsed');
+
+document.addEventListener('keydown', e => {
+  if (e.target.matches('input,textarea,select')) { if (e.key === 'Escape') e.target.blur(); return; }
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (k === ' ') { e.preventDefault(); $('#tPlay').click(); }
+  else if (k === 'l') goLive();
+  else if (k === '/') { e.preventDefault(); showTab('catalog'); $('#q').focus(); $('#q').select(); }
+  else if (k === 'escape') { if ($('#help').classList.contains('on')) $('#help').classList.remove('on'); else select(null); }
+  else if (k === 'f' && S.selected) setFollow(!S.follow);
+  else if (k === 'w' && S.selected) toggleWatch(S.selected);
+  else if (k === 'o') toggleOrbits();
+  else if (k === 'h') $('#homeBtn').click();
+  else if (k === '?') $('#help').classList.add('on');
+});
+
+/* =========================================================================
+   Boot
+   ========================================================================= */
+async function boot() {
+  setMap(store.get('ssa.map', 'ne'));
+  renderObserver(); renderLayers(); renderLegend(); renderTypeChips();
+  for (const w of S.watch.values()) if (w.l1 && w.l2) upsert(w.name, w.l1, w.l2, '_watch');
+  syncWatchEntities(); applyVisibility(); renderWatch(); updateClock();
+  $('#loadMsg').textContent = 'Downloading live orbital data from CelesTrak…';
+  const results = await Promise.allSettled([...S.layers].map(g => loadLayer(g)));
+  if (!S.sats.length) {
+    $('#loadMsg').textContent = 'Could not reach CelesTrak.';
+    $('#loadErr').style.display = '';
+    $('#loadErr').innerHTML = `<p class="hint">${esc(results.find(r => r.status === 'rejected')?.reason?.message || 'Network error')}</p><div class="bar" style="justify-content:center"><button class="btn solid" id="retry">Retry</button><button class="btn ghost" id="offline">Continue & import TLEs</button></div>`;
+    $('#retry').onclick = () => location.reload();
+    $('#offline').onclick = () => { $('#loading').classList.add('hide'); $('#left details:nth-of-type(3)').open = true; };
+    return;
+  }
+  $('#loadMsg').textContent = `Propagating ${fmtN(S.sats.length)} objects…`;
+  for (const id of S.watch.keys()) if (!S.byId.has(id)) { try { await fetchCatnr(id); } catch (e) { logEvent('err', `Watchlist object ${id} not found: ${e.message}`); } }
+  for (const w of S.watch.values()) { const s = S.byId.get(w.norad); if (s) w.name = s.name; }
+  saveWatch(); syncWatchEntities(); applyVisibility(); renderWatch(); runSearch();
+  logEvent('data', `Catalog loaded: ${fmtN(S.sats.length)} objects from CelesTrak (${[...S.loaded].map(g => GLABEL[g] || g).join(', ')})`);
+  setTimeout(() => $('#loading').classList.add('hide'), 300);
+  setTimeout(() => toast('Welcome to Orbital Watch', 'Click any dot to inspect it. Press ? for the guide.'), 900);
+}
+boot().catch(e => { console.error(e); $('#loadMsg').textContent = 'Startup error: ' + e.message; });
+setInterval(updateDataStatus, 60e3);
+})();
+</script>
+</body>
+</html>
